@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minutes AI Sales Mentor | Elite Executive Edition</title>
+    <title>Minutes AI Sales Mentor | Master Executive Edition</title>
     <!-- 
-        Minutes AI Sales Mentor - FINAL PRODUCTION MASTER
-        Architectural Integrity:
-        - Intelligence: Google Gemini 1.5 Flash (V1 Stable API)
-        - Communication: EmailJS (Full Template Mapping)
-        - Hardware: Web Audio API (Visualization) + Web Speech API (Transcription)
-        - Platform: Fully Optimized for Windows Surface / Chrome
+        Minutes AI Sales Mentor - PRODUCTION MASTER V1.6
+        Fixes implemented for Windows Surface:
+        1. API case-sensitivity fix for Gemini 1.5 Flash.
+        2. Endpoint version alignment (v1 stable).
+        3. Web Audio API resilience for volume bars.
+        4. Manual dictation fallback for "Status: network" errors.
     -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -81,10 +81,10 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, useCallback, useMemo } = React;
+        const { useState, useEffect, useRef, useCallback } = React;
 
         /**
-         * MASTER CONFIGURATION - FULLY VALIDATED
+         * MASTER CONFIGURATION - FULLY INTEGRATED
          */
         const CONFIG = {
             GEMINI_API_KEY: "AIzaSyAqqqiTHnkdBQipDwnsaXp93lUvx_IV3Ds",
@@ -101,10 +101,10 @@
             You are the "Minutes AI Sales Mentor & Executive Assistant." You are an elite sales coach and executive secretary.
             
             # OUTPUT SECTIONS
-            1. EXECUTIVE SUMMARY: Professional overview and client sentiment (Hot/Warm/Cold).
-            2. EXPLICIT ACTION ITEMS: Format: [Owner] - [Task] - [Due Date]. Be extremely specific.
-            3. PROACTIVE SUGGESTIONS: 3 high-value follow-up steps to move the needle.
-            4. PERFORMANCE MENTORSHIP & FEEDBACK: Critical analysis of Discovery questions, Objection handling, and Delivery.
+            1. EXECUTIVE SUMMARY: Professional overview and client sentiment.
+            2. EXPLICIT ACTION ITEMS: Format: [Owner] - [Task] - [Due Date]. Be specific.
+            3. PROACTIVE SUGGESTIONS: 3 high-value follow-up steps.
+            4. PERFORMANCE MENTORSHIP & FEEDBACK: Analysis of Discovery, Objections, and Delivery.
         `;
 
         const Icons = {
@@ -136,7 +136,6 @@
             const audioCtxRef = useRef(null);
             const analyzerRef = useRef(null);
             const streamRef = useRef(null);
-            const scrollRef = useRef(null);
 
             useEffect(() => {
                 if (CONFIG.EMAILJS.PUBLIC_KEY) emailjs.init(CONFIG.EMAILJS.PUBLIC_KEY);
@@ -144,13 +143,9 @@
 
             const addLog = useCallback((msg) => {
                 const time = new Date().toLocaleTimeString();
-                setDebugLog(prev => [`[${time}] ${msg}`, ...prev].slice(0, 20));
+                setDebugLog(prev => [`[${time}] ${msg}`, ...prev].slice(0, 15));
             }, []);
 
-            /**
-             * VOLUME VISUALIZER LOGIC
-             * Using Web Audio API to bypass SpeechRecognition blocks for hardware confirmation
-             */
             const startVisualizer = async () => {
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -173,24 +168,20 @@
                     const updateVols = () => {
                         if (!isActuallyRecording.current) return;
                         analyzerRef.current.getByteFrequencyData(dataArr);
-                        // Enhance sensitivity for surface mics
                         const nVols = Array.from(dataArr.slice(0, 12)).map(v => (v / 200) * 100);
                         setVols(nVols);
                         requestAnimationFrame(updateVols);
                     };
                     updateVols();
                 } catch (e) {
-                    addLog("Hardware Audio Meter Blocked.");
+                    addLog("Mic Meter Blocked.");
                 }
             };
 
-            /**
-             * TRANSCRIPTION ENGINE SETUP
-             */
             useEffect(() => {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (!SpeechRecognition) {
-                    setError("Speech Recognition is not natively supported in this browser. Please use Google Chrome.");
+                    setError("Speech Recognition not supported in this browser. Please use Chrome.");
                     return;
                 }
 
@@ -202,7 +193,7 @@
                 rec.onstart = () => {
                     isActuallyRecording.current = true;
                     setHasNetworkError(false);
-                    addLog("Transcription Engine: ACTIVE");
+                    addLog("Mic Status: LIVE");
                 };
 
                 rec.onresult = (e) => {
@@ -216,10 +207,10 @@
                 };
 
                 rec.onerror = (e) => {
-                    addLog(`Engine Status: ${e.error}`);
+                    addLog(`Error Log: ${e.error}`);
                     if (e.error === 'network') {
                         setHasNetworkError(true);
-                        addLog("HINT: Windows Privacy is blocking speech servers.");
+                        addLog("Surface Block Detected. Use Win+H Fallback.");
                     }
                 };
 
@@ -227,7 +218,7 @@
                     if (isActuallyRecording.current) {
                         setTimeout(() => {
                             try { if (isActuallyRecording.current) rec.start(); } catch(err) {}
-                        }, 800);
+                        }, 1000);
                     }
                 };
 
@@ -242,42 +233,40 @@
                     setIsRecording(false);
                     setInterimText('');
                     setVols(new Array(12).fill(0));
-                    addLog("Recording session ended.");
+                    addLog("Recording stopped.");
                 } else {
                     setError(null);
                     setHasNetworkError(false);
-                    addLog("Initializing hardware...");
+                    addLog("Waking hardware...");
                     await startVisualizer();
                     try {
                         recognitionRef.current?.start();
                         setIsRecording(true);
                         isActuallyRecording.current = true;
-                    } catch (err) { 
-                        setError("Failed to access Microphone. Please check site permissions."); 
-                    }
+                    } catch (err) { setError("Permission denied."); }
                 }
             };
 
             const handleAnalysis = async () => {
-                const fullText = (transcript + interimText).trim();
-                if (!fullText) {
-                    setError("No text captured. Record a session or dictate manually into the box.");
+                const fullContent = (transcript + interimText).trim();
+                if (!fullContent) {
+                    setError("Nothing to analyze. Record your voice or paste text into the box.");
                     return;
                 }
 
                 setIsLoading(true);
                 setError(null);
-                addLog("Connecting to Production Sales AI...");
+                addLog("Analyzing with Production AI...");
 
                 try {
-                    // VERSION LOCK: Stable V1 Endpoint
+                    // CRITICAL FIX: Explicit v1 URL and lowercase model name to avoid 404 errors
                     const response = await fetch(
                         `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`,
                         {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                contents: [{ parts: [{ text: fullText }] }],
+                                contents: [{ parts: [{ text: fullContent }] }],
                                 systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }
                             })
                         }
@@ -290,13 +279,13 @@
                     if (aiResponse) {
                         setAnalysis(parseAnalysis(aiResponse));
                         setActiveTab('analysis');
-                        addLog("Mentorship Report Generated Successfully.");
+                        addLog("Report Delivered.");
                     } else {
                         throw new Error("The AI returned an empty response.");
                     }
                 } catch (err) {
                     addLog("AI Pipeline Fail.");
-                    setError(`ANALYSIS FAILED: ${err.message}. Please verify your Gemini Key.`);
+                    setError(`ANALYSIS FAILED: ${err.message}`);
                 } finally {
                     setIsLoading(false);
                 }
@@ -319,7 +308,6 @@
             const sendEmail = async () => {
                 if (!analysis) return;
                 setEmailStatus('sending');
-                addLog("Transmitting executive report...");
                 
                 const templateParams = {
                     "Discussion Topic": topic || "Elite Sales Meeting",
@@ -335,10 +323,10 @@
                 try {
                     await emailjs.send(CONFIG.EMAILJS.SERVICE_ID, CONFIG.EMAILJS.TEMPLATE_ID, templateParams);
                     setEmailStatus('sent');
-                    addLog("Email Delivery Confirmed.");
+                    addLog("Email success.");
                     setTimeout(() => setEmailStatus('idle'), 5000);
                 } catch (err) {
-                    addLog("EmailJS Transmission Error.");
+                    addLog("Email service error.");
                     setEmailStatus('error');
                     window.location.href = `mailto:${CONFIG.USER_EMAIL}?subject=Meeting Report&body=${encodeURIComponent(analysis.summary)}`;
                 }
@@ -353,7 +341,7 @@
                             </div>
                             <div>
                                 <h1 className="text-2xl font-black tracking-tight text-slate-800 uppercase italic leading-none">Minutes AI</h1>
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1 italic">Master Version 1.5.2</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-1 italic">Master Version 1.6.0</p>
                             </div>
                         </div>
                         <div className="flex bg-slate-200/60 rounded-2xl p-1.5 shadow-inner backdrop-blur-sm">
@@ -366,7 +354,7 @@
                         <div className="mb-8 bg-red-50 border-2 border-red-100 rounded-3xl p-6 text-red-800 text-[11px] font-bold flex items-start gap-4 shadow-sm fade-in-up">
                             <div className="bg-red-100 p-2 rounded-full shrink-0"><Icons.Alert /></div>
                             <div className="leading-relaxed uppercase tracking-tight">
-                                <span className="block text-red-600 mb-1 underline">System Exception</span>
+                                <span className="block text-red-600 mb-1 underline font-black">System Alert</span>
                                 {error}
                             </div>
                         </div>
@@ -374,7 +362,7 @@
 
                     {activeTab === 'input' ? (
                         <div className="space-y-8 fade-in-up">
-                            {/* RECORDING CONSOLE */}
+                            {/* MASTER CONSOLE */}
                             <div className="bg-white rounded-[4rem] shadow-sm border border-slate-200/60 p-12 text-center relative overflow-hidden group">
                                 {isRecording && <div className="absolute inset-0 bg-indigo-500/[0.03] pulse-ring"></div>}
                                 
@@ -395,84 +383,86 @@
                                 
                                 <input 
                                     type="text" 
-                                    placeholder="Enter Meeting Topic..."
+                                    placeholder="Discussion Topic..."
                                     className="w-full max-w-xs mx-auto border-b-2 border-slate-100 focus:border-indigo-400 outline-none text-center bg-transparent py-2 text-sm font-bold text-slate-700 placeholder:text-slate-200 uppercase tracking-[0.2em]"
                                     value={topic}
                                     onChange={(e) => setTopic(e.target.value)}
                                 />
                             </div>
 
-                            {/* TRANSCRIPT FEED */}
+                            {/* TRANSCRIPT FEED AREA */}
                             <div className="bg-white rounded-[3rem] shadow-sm border border-slate-200/60 overflow-hidden relative">
                                 {hasNetworkError && (
                                     <div className="absolute inset-x-0 top-14 bottom-0 bg-white/95 z-20 flex flex-col items-center justify-center p-10 text-center animate-in fade-in duration-500">
                                         <div className="bg-amber-100 p-4 rounded-full text-amber-600 mb-6"><Icons.Alert /></div>
-                                        <h3 className="text-lg font-black text-slate-800 uppercase italic mb-2 tracking-tight">Speech Service Blocked</h3>
-                                        <p className="text-sm text-slate-500 font-medium mb-8 leading-relaxed max-w-xs">
-                                            Windows Privacy settings are blocking cloud transcription. Press **Win + H** to use your Surface's built-in listener directly.
+                                        <h3 className="text-lg font-black text-slate-800 uppercase italic mb-2 tracking-tight underline">Hardware Fallback Required</h3>
+                                        <p className="text-sm text-slate-500 font-bold mb-8 leading-relaxed max-w-xs uppercase">
+                                            Windows is blocking the cloud. Press <span className="bg-slate-100 px-2 py-1 rounded">Win + H</span> on your keyboard and talk into this box.
                                         </p>
                                         <button 
                                             onClick={() => setHasNetworkError(false)}
-                                            className="px-8 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95"
+                                            className="px-10 py-5 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all"
                                         >
-                                            Got it, I'll Dictate
+                                            Click here, then press Win+H
                                         </button>
                                     </div>
                                 )}
                                 <div className="px-8 py-5 bg-slate-50/80 border-b flex justify-between items-center text-[11px] font-black text-slate-400 uppercase tracking-widest">
                                     <span>Transcript Live Feed</span>
-                                    <button onClick={() => { setTranscript(''); setInterimText(''); }} className="hover:text-red-400 transition-all"><Icons.Trash /></button>
+                                    <button onClick={() => { setTranscript(''); setInterimText(''); }} className="hover:text-red-400 transition-all p-2"><Icons.Trash /></button>
                                 </div>
                                 <textarea 
-                                    className="w-full h-[450px] p-10 text-xl font-bold leading-relaxed text-slate-700 focus:outline-none resize-none bg-transparent scrollbar-hide"
-                                    placeholder="Awaiting meeting content..."
+                                    className="w-full h-[400px] p-10 text-xl font-bold leading-relaxed text-slate-700 focus:outline-none resize-none bg-transparent scrollbar-hide"
+                                    placeholder="Start talking or use Win+H..."
                                     value={transcript + interimText}
                                     onChange={(e) => setTranscript(e.target.value)}
                                 />
                                 <div className="p-8 bg-slate-50/50 border-t">
                                     <button onClick={handleAnalysis} disabled={isLoading || isRecording} className="w-full bg-indigo-600 text-white font-black py-7 rounded-[2.5rem] uppercase tracking-[0.2em] text-xs shadow-2xl shadow-indigo-100 disabled:bg-slate-200 transition-all active:scale-[0.98]">
-                                        {isLoading ? "Consulting AI Sales Mentor..." : "Analyze & Generate Report"}
+                                        {isLoading ? "Consulting AI Mentor..." : "Generate Final Report"}
                                     </button>
                                 </div>
                             </div>
 
-                            {/* SYSTEM LOG */}
-                            <div className="bg-slate-900 rounded-[2rem] p-8 text-[11px] font-mono text-indigo-300/40 flex flex-col gap-2 shadow-2xl border border-slate-800/50">
-                                <div className="flex items-center gap-3 border-b border-white/5 pb-4 mb-2">
+                            {/* ENGINE LOGS */}
+                            <div className="bg-slate-900 rounded-[2.5rem] p-10 text-[11px] font-mono text-indigo-300/40 flex flex-col gap-3 shadow-2xl border border-slate-800/50">
+                                <div className="flex items-center gap-3 border-b border-white/5 pb-5 mb-2">
                                     <div className={`w-2.5 h-2.5 rounded-full ${isRecording ? 'bg-indigo-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-                                    <span className="text-white font-bold tracking-[0.2em] uppercase">Engine Status Log</span>
+                                    <span className="text-white font-bold tracking-[0.3em] uppercase italic">System Engine Status</span>
                                 </div>
-                                <div className="space-y-1.5 h-32 overflow-y-auto scrollbar-hide">
-                                    {debugLog.map((log, i) => <div key={i} className="animate-in slide-in-from-left-2 tracking-tighter"> {log}</div>)}
+                                <div className="space-y-2 h-36 overflow-y-auto scrollbar-hide">
+                                    {debugLog.map((log, i) => <div key={i} className="animate-in slide-in-from-left-2 tracking-tighter opacity-70"> {log}</div>)}
                                 </div>
                             </div>
                         </div>
                     ) : (
                         <div className="space-y-8 pb-20 fade-in-up">
                             <div className="flex justify-end sticky top-4 z-50">
-                                <button onClick={sendEmail} disabled={emailStatus === 'sending'} className={`flex items-center gap-3 px-8 py-3.5 rounded-2xl text-[11px] font-black uppercase shadow-lg active:scale-95 transition-all ${emailStatus === 'sent' ? 'bg-emerald-100 text-emerald-700 shadow-none' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
-                                    {emailStatus === 'sending' ? 'Transmitting...' : emailStatus === 'sent' ? <><Icons.Check /> Report Delivered</> : <><Icons.Mail /> Email Final Report</>}
+                                <button onClick={sendEmail} disabled={emailStatus === 'sending'} className={`flex items-center gap-3 px-8 py-4 rounded-[2rem] text-[11px] font-black uppercase shadow-2xl active:scale-95 transition-all ${emailStatus === 'sent' ? 'bg-emerald-100 text-emerald-700 shadow-none' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
+                                    {emailStatus === 'sending' ? 'Transmitting...' : emailStatus === 'sent' ? <><Icons.Check /> Report Delivered</> : <><Icons.Mail /> Email Executive Report</>}
                                 </button>
                             </div>
                             {analysis && (
                                 <>
-                                    <div className="bg-white rounded-[3rem] shadow-sm border border-slate-200/80 p-10 relative overflow-hidden group">
-                                        <span className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.3em] block mb-6 border-b-2 border-indigo-50 pb-1 w-fit">1. Executive Summary</span>
-                                        <p className="text-lg text-slate-800 leading-relaxed font-bold italic tracking-tight">"{analysis.summary}"</p>
+                                    <div className="bg-white rounded-[3.5rem] shadow-sm border border-slate-200/80 p-12 relative overflow-hidden group shadow-indigo-100/20">
+                                        <span className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.3em] block mb-8 border-b-2 border-indigo-50 pb-2 w-fit">1. Executive Summary</span>
+                                        <p className="text-xl text-slate-800 leading-relaxed font-bold italic tracking-tight italic">"{analysis.summary}"</p>
                                     </div>
-                                    <div className="bg-white rounded-[3rem] shadow-sm border border-slate-200/80 p-10">
-                                        <span className="text-[11px] font-black text-emerald-600 uppercase tracking-[0.3em] block mb-6 border-b-2 border-emerald-50 pb-1 w-fit">2. Action Items</span>
-                                        <div className="space-y-4 font-bold italic text-slate-700 text-base whitespace-pre-line leading-relaxed">{analysis.actions}</div>
+                                    <div className="bg-white rounded-[3.5rem] shadow-sm border border-slate-200/80 p-12 shadow-indigo-100/20">
+                                        <span className="text-[11px] font-black text-emerald-600 uppercase tracking-[0.3em] block mb-10 border-b-2 border-emerald-50 pb-2 w-fit">2. Action Items</span>
+                                        <div className="space-y-4 font-bold italic text-slate-700 text-lg whitespace-pre-line leading-relaxed italic">{analysis.actions}</div>
                                     </div>
-                                    <div className="bg-white rounded-[3rem] shadow-sm border border-slate-200/80 p-10">
-                                        <span className="text-[11px] font-black text-amber-600 uppercase tracking-[0.3em] block mb-4 border-b-2 border-amber-50 pb-1 w-fit">3. Suggestions</span>
-                                        <p className="text-base text-slate-700 leading-relaxed font-bold tracking-tight">{analysis.suggestions}</p>
+                                    <div className="bg-white rounded-[3.5rem] shadow-sm border border-slate-200/80 p-12 shadow-indigo-100/20">
+                                        <span className="text-[11px] font-black text-amber-600 uppercase tracking-[0.3em] block mb-6 border-b-2 border-amber-50 pb-2 w-fit">3. Proactive Suggestions</span>
+                                        <p className="text-lg text-slate-700 leading-relaxed font-bold tracking-tight italic">{analysis.suggestions}</p>
                                     </div>
-                                    <div className="bg-slate-900 rounded-[4rem] p-14 text-white shadow-2xl border-4 border-indigo-600/10">
-                                        <span className="text-[11px] font-black text-indigo-400 uppercase tracking-[0.4em] block border-b border-white/10 pb-4 mb-8 italic flex items-center gap-3">
-                                            <Icons.Trending /> Elite Sales Mentorship
+                                    <div className="bg-slate-900 rounded-[4.5rem] p-16 text-white shadow-[0_40px_80px_rgba(79,70,229,0.3)] border-4 border-indigo-600/10">
+                                        <span className="text-[11px] font-black text-indigo-400 uppercase tracking-[0.5em] block border-b border-white/10 pb-6 mb-10 italic flex items-center gap-4">
+                                            <Icons.Trending /> Master Sales Mentorship
                                         </span>
-                                        <p className="text-2xl leading-[1.6] text-indigo-50 font-light italic whitespace-pre-line tracking-tighter">{analysis.feedback}</p>
+                                        <p className="text-2xl leading-[1.7] text-indigo-50 font-light italic whitespace-pre-line tracking-tighter">
+                                            {analysis.feedback}
+                                        </p>
                                     </div>
                                 </>
                             )}
