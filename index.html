@@ -17,6 +17,7 @@
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .volume-bar { transition: height 0.1s ease-out; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 overflow-x-hidden">
@@ -59,19 +60,56 @@
             const [error, setError] = useState(null);
             const [activeTab, setActiveTab] = useState('input');
             const [debugLog, setDebugLog] = useState([]);
+            const [volume, setVolume] = useState(0);
 
             const recognitionRef = useRef(null);
             const isActuallyRecording = useRef(false);
+            const audioContextRef = useRef(null);
+            const analyserRef = useRef(null);
+            const dataArrayRef = useRef(null);
+            const animationFrameRef = useRef(null);
+            const retryCountRef = useRef(0);
 
             useEffect(() => {
                 if (EMAILJS_PUBLIC_KEY) {
                     emailjs.init(EMAILJS_PUBLIC_KEY);
                 }
+                return () => {
+                    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+                };
             }, []);
 
             const addLog = useCallback((msg) => {
                 setDebugLog(prev => [msg, ...prev].slice(0, 10));
             }, []);
+
+            const updateVolume = () => {
+                if (analyserRef.current && dataArrayRef.current) {
+                    analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+                    let values = 0;
+                    for (let i = 0; i < dataArrayRef.current.length; i++) {
+                        values += dataArrayRef.current[i];
+                    }
+                    const average = values / dataArrayRef.current.length;
+                    setVolume(average);
+                    animationFrameRef.current = requestAnimationFrame(updateVolume);
+                }
+            };
+
+            const startAudioVisualizer = async (stream) => {
+                try {
+                    audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                    const source = audioContextRef.current.createMediaStreamSource(stream);
+                    analyserRef.current = audioContextRef.current.createAnalyser();
+                    analyserRef.current.fftSize = 256;
+                    const bufferLength = analyserRef.current.frequencyBinCount;
+                    dataArrayRef.current = new Uint8Array(bufferLength);
+                    source.connect(analyserRef.current);
+                    updateVolume();
+                } catch (e) {
+                    addLog("Visualizer failed");
+                }
+            };
 
             useEffect(() => {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -87,6 +125,7 @@
 
                 recognition.onstart = () => {
                     isActuallyRecording.current = true;
+                    retryCountRef.current = 0;
                     addLog("Mic: LIVE");
                 };
 
@@ -101,11 +140,17 @@
                         }
                     }
                     if (finalStr) setTranscript(prev => prev + finalStr);
-                    setInterimText(interimStr); // Ensure real-time visibility
+                    setInterimText(interimStr);
                 };
 
                 recognition.onerror = (event) => {
                     addLog(`Status: ${event.error}`);
+                    if (event.error === 'network') {
+                        retryCountRef.current++;
+                        if (retryCountRef.current > 3) {
+                            setError("Consistent network error. If on Windows, check 'Online Speech Recognition' settings or try a different Wi-Fi.");
+                        }
+                    }
                     if (event.error === 'not-allowed') {
                         setError("Microphone access denied. Check site permissions.");
                         setIsRecording(false);
@@ -115,11 +160,12 @@
 
                 recognition.onend = () => {
                     if (isActuallyRecording.current) {
+                        const delay = event?.error === 'network' ? 3000 : 500;
                         addLog("Restarting engine...");
                         setTimeout(() => {
                             try { if (isActuallyRecording.current) recognition.start(); }
                             catch (e) { addLog("Restart blocked."); }
-                        }, 500);
+                        }, delay);
                     }
                 };
 
@@ -132,13 +178,16 @@
                     recognitionRef.current?.stop();
                     setIsRecording(false);
                     setInterimText('');
+                    setVolume(0);
+                    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
                 } else {
                     setError(null);
                     setTranscript('');
                     setInterimText('');
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                        stream.getTracks().forEach(t => t.stop());
+                        startAudioVisualizer(stream);
+                        // stream.getTracks().forEach(t => t.stop()); // Don't stop yet, we need it for visualizer
                         recognitionRef.current?.start();
                         setIsRecording(true);
                         isActuallyRecording.current = true;
@@ -209,7 +258,6 @@
 
                 try {
                     if (!EMAILJS_SERVICE_ID || !EMAILJS_PUBLIC_KEY || !EMAILJS_TEMPLATE_ID) {
-                        // Fallback to mailto
                         const content = `SUMMARY: ${analysis.summary}\n\nACTIONS: ${analysis.actions}\n\nSUGGESTIONS: ${analysis.suggestions}\n\nFEEDBACK: ${analysis.feedback}`;
                         window.location.href = `mailto:?subject=Sales Mentor Report&body=${encodeURIComponent(content)}`;
                         setEmailStatus('sent');
@@ -264,6 +312,17 @@
                             {/* Record Button UI */}
                             <div className="bg-white rounded-[3rem] shadow-sm border border-slate-200 p-12 text-center relative overflow-hidden">
                                 {isRecording && <div className="absolute inset-0 bg-indigo-500/5 pulse-ring"></div>}
+                                
+                                <div className="flex justify-center items-end gap-1 mb-4 h-8">
+                                    {[...Array(8)].map((_, i) => (
+                                        <div 
+                                            key={i} 
+                                            className="w-1 bg-indigo-400 rounded-full volume-bar" 
+                                            style={{ height: isRecording ? `${Math.max(10, volume * (1 - Math.abs(i-3.5)/4))} %` : '4px' }}
+                                        />
+                                    ))}
+                                </div>
+
                                 <button onClick={toggleRecording} className={`w-48 h-48 rounded-full flex flex-col items-center justify-center transition-all shadow-2xl mx-auto mb-8 relative z-10 active:scale-95 ${isRecording ? 'bg-indigo-600 ring-8 ring-indigo-50' : 'bg-slate-100 ring-8 ring-slate-50 hover:bg-slate-200'}`}>
                                     {isRecording ? <div className="text-white scale-150"><IconSquare /></div> : <div className="text-slate-400 scale-150"><IconMic /></div>}
                                     <span className={`text-[11px] font-black uppercase tracking-widest mt-6 ${isRecording ? 'text-white' : 'text-slate-400'}`}>{isRecording ? "Stop Now" : "Record"}</span>
