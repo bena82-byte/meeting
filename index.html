@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V3.9 Production Master</title>
+    <title>Minutes AI | V4.4 Final Master</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -13,37 +13,47 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; background: #f8fafc; overflow-x: hidden; touch-action: manipulation; }
+        
         .loading-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #fff; position: fixed; inset: 0; z-index: 9999; }
         .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #6366f1; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         #root:not(:empty) + .loading-screen { display: none; }
+        
         input, textarea { font-size: 16px !important; }
         .vol-bar { transition: height 0.1s ease-out; min-height: 4px; border-radius: 99px; }
-        .fade-in { animation: fadeIn 0.5s ease-out; }
+        
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
         .success-pulse { animation: successPulse 2s infinite; }
-        @keyframes successPulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        @keyframes successPulse { 
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 
+            70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } 
+        }
     </style>
 </head>
 <body class="text-slate-900 antialiased">
     <div id="root"></div>
     <div class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.9 Final...</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Finalizing Minutes AI V4.4...</p>
     </div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, useCallback } = React;
+        const { useState, useEffect, useRef } = React;
 
-        // ENVIRONMENT CONFIG
-        const apiKey = ""; 
-
+        // ---------------------------------------------------------
+        // PRODUCTION CREDENTIALS
+        const apiKey = "AIzaSyAqqqiTHnkdBQipDwnsaXp931Uvx_IV3Ds"; 
+        
         const CONFIG = {
             EMAILJS_SERVICE: "service_u54bof7",
             EMAILJS_TEMPLATE: "template_azspfba",
             EMAILJS_KEY: "FjAY013_HlrpGCEZT",
             TARGET_EMAIL: "ben.alexander@aplaceformom.com"
         };
+        // ---------------------------------------------------------
 
         const SYSTEM_PROMPT = `
             # ROLE
@@ -59,7 +69,7 @@
             const [interimTranscript, setInterimTranscript] = useState('');
             const [analysis, setAnalysis] = useState(null);
             const [isRecording, setIsRecording] = useState(false);
-            const [loading, setLoading] = useState(false);
+            const [isLoading, setIsLoading] = useState(false);
             const [emailStatus, setEmailStatus] = useState('idle'); 
             const [error, setError] = useState(null);
             const [view, setView] = useState('input');
@@ -69,77 +79,79 @@
             const recognitionRef = useRef(null);
             const streamRef = useRef(null);
             const audioCtxRef = useRef(null);
+            const sourceRef = useRef(null);
             const isRecordingRef = useRef(false);
 
             useEffect(() => {
-                if (CONFIG.EMAILJS_KEY) {
-                    try { emailjs.init(CONFIG.EMAILJS_KEY); } catch (e) {}
-                }
-                setupRecognition();
+                if (CONFIG.EMAILJS_KEY) emailjs.init(CONFIG.EMAILJS_KEY);
+                setupSpeechEngine();
+                return () => shutdownEverything();
             }, []);
 
-            const setupRecognition = () => {
+            const setupSpeechEngine = () => {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                if (SpeechRecognition) {
-                    const rec = new SpeechRecognition();
-                    rec.continuous = true;
-                    rec.interimResults = true;
-                    rec.lang = 'en-US';
-                    
-                    rec.onresult = (e) => {
-                        // REJECTION CHECK: If stop was pressed, ignore any incoming audio buffers
-                        if (!isRecordingRef.current) return;
-                        
-                        let final = '';
-                        let interim = '';
-                        for (let i = e.resultIndex; i < e.results.length; ++i) {
-                            if (e.results[i].isFinal) {
-                                final += e.results[i][0].transcript + ' ';
-                            } else {
-                                interim += e.results[i][0].transcript;
-                            }
-                        }
-                        if (final) setTranscript(prev => prev + final);
-                        setInterimTranscript(interim);
-                    };
+                if (!SpeechRecognition) return;
 
-                    rec.onend = () => {
-                        if (isRecordingRef.current) {
-                            try { rec.start(); } catch(err) {}
-                        }
-                    };
-                    recognitionRef.current = rec;
+                const rec = new SpeechRecognition();
+                rec.continuous = true;
+                rec.interimResults = true;
+                rec.lang = 'en-US';
+
+                rec.onresult = (e) => {
+                    // MASTER BLOCK: If stop button was clicked, reject all incoming audio processing
+                    if (!isRecordingRef.current) return;
+                    
+                    let final = '';
+                    let interim = '';
+                    for (let i = e.resultIndex; i < e.results.length; ++i) {
+                        if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
+                        else interim += e.results[i][0].transcript;
+                    }
+                    if (final) setTranscript(prev => prev + final);
+                    setInterimTranscript(interim);
+                };
+
+                rec.onend = () => {
+                    if (isRecordingRef.current) {
+                        try { rec.start(); } catch(err) {}
+                    }
+                };
+
+                recognitionRef.current = rec;
+            };
+
+            const shutdownEverything = () => {
+                isRecordingRef.current = false;
+                if (recognitionRef.current) {
+                    recognitionRef.current.onresult = null;
+                    recognitionRef.current.onend = null;
+                    try { recognitionRef.current.abort(); } catch(e) {} 
+                }
+                if (streamRef.current) {
+                    streamRef.current.getTracks().forEach(t => t.stop());
+                }
+                if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+                    audioCtxRef.current.close();
                 }
             };
 
             const toggleRec = async () => {
                 if (isRecording) {
-                    // --- PRESERVE DATA FIRST ---
-                    const finalInterim = interimTranscript;
-                    setTranscript(prev => prev + finalInterim);
+                    // --- PRESERVE DATA IMMEDIATELY ---
+                    const currentInterim = interimTranscript;
                     
-                    // --- HARD STOP SEQUENCE ---
-                    isRecordingRef.current = false;
+                    // --- HARD STOP ---
+                    shutdownEverything();
                     setIsRecording(false);
                     
-                    if (recognitionRef.current) {
-                        recognitionRef.current.stop(); 
-                    }
-                    
-                    if (streamRef.current) {
-                        streamRef.current.getTracks().forEach(t => t.stop());
-                    }
-                    if (audioCtxRef.current) {
-                        audioCtxRef.current.close();
-                    }
-                    
+                    // Flush the last words into the main box
+                    setTranscript(prev => (prev + currentInterim).trim() + ' ');
                     setInterimTranscript('');
                     setVols(new Array(12).fill(0));
                     
-                    // Re-setup engine to be fresh for next click
-                    setupRecognition();
+                    setupSpeechEngine(); // Reset engine for next use
                 } else {
-                    // --- START SEQUENCE ---
+                    // --- START ---
                     setError(null);
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -147,47 +159,45 @@
                         
                         audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
                         const analyzer = audioCtxRef.current.createAnalyser();
-                        audioCtxRef.current.createMediaStreamSource(stream).connect(analyzer);
+                        sourceRef.current = audioCtxRef.current.createMediaStreamSource(stream);
+                        sourceRef.current.connect(analyzer);
                         const data = new Uint8Array(analyzer.frequencyBinCount);
                         
                         isRecordingRef.current = true;
                         setIsRecording(true);
 
-                        const update = () => {
+                        const updateVisuals = () => {
                             if (isRecordingRef.current && stream.active) {
                                 analyzer.getByteFrequencyData(data);
                                 setVols(Array.from(data.slice(0, 12)).map(v => (v / 180) * 100));
-                                requestAnimationFrame(update);
+                                requestAnimationFrame(updateVisuals);
                             } else {
                                 setVols(new Array(12).fill(0));
                             }
                         };
-                        update();
+                        updateVisuals();
                         
-                        if (recognitionRef.current) {
-                            recognitionRef.current.start();
-                        }
+                        recognitionRef.current?.start();
                     } catch (e) {
-                        setError("Microphone Hardware Restricted. This usually happens in chat previews. Use your GitHub URL directly for full access.");
+                        setError("Microphone Hardware Restricted. Ensure browser permissions are enabled.");
                     }
                 }
             };
 
-            const analyze = async () => {
+            const handleAnalyze = async () => {
                 const fullText = (transcript + interimTranscript).trim();
                 if (!fullText) {
-                    setError("The transcript is empty. Please record or type text before analyzing.");
+                    setError("Transcript is empty. Speak or type some notes first.");
                     return;
                 }
                 
-                setLoading(true);
+                setIsLoading(true);
                 setError(null);
 
-                const fetchWithRetry = async (retry = 0) => {
-                    const delays = [1000, 2000, 4000, 8000, 16000];
+                const callAI = async (retry = 0) => {
+                    const delays = [1000, 2000, 4000];
                     try {
-                        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-                        const res = await fetch(url, {
+                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
@@ -196,19 +206,19 @@
                             })
                         });
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error?.message || "AI Analysis Failed");
+                        if (!res.ok) throw new Error(data.error?.message || "AI Error");
                         return data;
                     } catch (e) {
-                        if (retry < 5) {
+                        if (retry < 2) {
                             await new Promise(r => setTimeout(r, delays[retry]));
-                            return fetchWithRetry(retry + 1);
+                            return callAI(retry + 1);
                         }
                         throw e;
                     }
                 };
 
                 try {
-                    const data = await fetchWithRetry();
+                    const data = await callAI();
                     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (aiText) {
                         const sections = { summary: "", actions: "", suggestions: "", mentorship: "" };
@@ -223,115 +233,81 @@
                         setAnalysis(sections);
                         setView('analysis');
                     }
-                } catch (e) { 
-                    setError(`System Alert: ${e.message}`); 
-                }
-                setLoading(false);
+                } catch (e) { setError(`AI Error: ${e.message}`); }
+                setIsLoading(false);
             };
 
             const sendEmail = async () => {
                 if (!analysis) return;
                 setEmailStatus('sending');
-                setError(null);
-                
                 try {
-                    const templateParams = {
-                        "Discussion Topic": topic || "Executive Recap",
+                    await emailjs.send(CONFIG.EMAILJS_SERVICE, CONFIG.EMAILJS_TEMPLATE, {
+                        "Discussion Topic": topic || "Elite Sales Recap",
                         summary: analysis.summary,
                         action_items: analysis.actions,
                         suggestions: analysis.suggestions,
                         mentorship: analysis.mentorship,
                         transcript: transcript + interimTranscript,
                         email: CONFIG.TARGET_EMAIL
-                    };
-
-                    const result = await emailjs.send(CONFIG.EMAILJS_SERVICE, CONFIG.EMAILJS_TEMPLATE, templateParams, CONFIG.EMAILJS_KEY);
-                    
-                    if (result.status === 200) {
-                        setEmailStatus('sent');
-                        setTimeout(() => setEmailStatus('idle'), 5000);
-                    } else { throw new Error("Email provider rejected request"); }
+                    });
+                    setEmailStatus('sent');
+                    setTimeout(() => setEmailStatus('idle'), 5000);
                 } catch (e) {
                     setEmailStatus('error');
-                    setError("Email service failed. Opening your device mail app...");
-                    const mailtoUrl = `mailto:${CONFIG.TARGET_EMAIL}?subject=${encodeURIComponent(topic || 'Recap')}&body=${encodeURIComponent(analysis.summary)}`;
-                    window.location.href = mailtoUrl;
+                    window.location.href = `mailto:${CONFIG.TARGET_EMAIL}?subject=${encodeURIComponent(topic || 'Recap')}&body=${encodeURIComponent(analysis.summary)}`;
                 }
             };
 
             return (
-                <div className="max-w-md mx-auto min-h-screen flex flex-col pt-4 pb-10 px-4">
-                    <header className="flex justify-between items-center mb-8">
+                <div className="max-w-md mx-auto min-h-screen flex flex-col pt-6 pb-12 px-5">
+                    <header className="flex justify-between items-center mb-10">
                         <div className="flex items-center gap-2">
-                            <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-100">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-                            </div>
-                            <h1 className="font-black italic text-lg text-slate-800 tracking-tighter uppercase leading-none">MINUTES AI</h1>
+                            <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></div>
+                            <h1 className="font-black italic text-xl tracking-tighter uppercase text-slate-800 leading-none">MINUTES AI</h1>
                         </div>
                         <div className="flex bg-slate-200 p-1 rounded-xl shadow-inner">
-                            <button onClick={() => setView('input')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${view === 'input' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>REC</button>
-                            <button onClick={() => analysis && setView('analysis')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${!analysis ? 'opacity-30' : ''} ${view === 'analysis' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>REPORT</button>
+                            <button onClick={() => setView('input')} className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${view === 'input' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>REC</button>
+                            <button onClick={() => analysis && setView('analysis')} className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!analysis ? 'opacity-30' : ''} ${view === 'analysis' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>REPORT</button>
                         </div>
                     </header>
 
                     {error && <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-[10px] font-bold text-red-600 uppercase leading-tight fade-in">{error}</div>}
 
                     {view === 'input' ? (
-                        <div className="space-y-4 flex-1 flex flex-col fade-in">
-                            <div className="bg-white rounded-[3rem] border border-slate-100 p-10 text-center shadow-sm relative overflow-hidden group">
+                        <div className="space-y-6 flex-1 flex flex-col fade-in">
+                            <div className="bg-white rounded-[3.5rem] border border-slate-100 p-12 text-center shadow-sm relative overflow-hidden group">
                                 {isRecording && <div className="absolute inset-0 bg-indigo-500/5 animate-pulse"></div>}
-                                <div className="flex justify-center items-end gap-1.5 mb-8 h-10">
+                                <div className="flex justify-center items-end gap-1.5 mb-10 h-10">
                                     {vols.map((v, i) => <div key={i} className="w-2 bg-indigo-500 vol-bar shadow-sm" style={{ height: `${Math.max(15, v)}%`, opacity: 0.4 + (v/100) }} />)}
                                 </div>
                                 <button onClick={toggleRec} className={`w-36 h-36 rounded-full mx-auto flex flex-col items-center justify-center shadow-2xl transition-all active:scale-95 relative z-10 ${isRecording ? 'bg-indigo-600 ring-8 ring-indigo-50 shadow-indigo-200' : 'bg-slate-100'}`}>
-                                    {isRecording ? <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="5" y="5" rx="2" ry="2"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>}
-                                    <span className={`text-[10px] font-black uppercase mt-2 tracking-widest ${isRecording ? 'text-white' : 'text-slate-400'}`}>{isRecording ? "Stop" : "Record"}</span>
+                                    {isRecording ? <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="5" y="5" rx="2" ry="2"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>}
+                                    <span className={`text-[10px] font-black uppercase mt-3 tracking-widest ${isRecording ? 'text-white' : 'text-slate-400'}`}>{isRecording ? "Stop" : "Record"}</span>
                                 </button>
-                                <div className="mt-6">
-                                    <input 
-                                        type="text" 
-                                        placeholder="Discussion Topic..." 
-                                        className="w-full text-center bg-transparent border-b border-slate-100 py-2 text-sm font-bold focus:border-indigo-400 outline-none uppercase tracking-widest placeholder:text-slate-300" 
-                                        value={topic} 
-                                        onChange={(e) => setTopic(e.target.value)} 
-                                    />
-                                </div>
+                                <input type="text" placeholder="Meeting Topic..." className="mt-8 w-full text-center bg-transparent border-b border-slate-100 py-2 text-sm font-bold focus:border-indigo-400 outline-none uppercase tracking-widest" value={topic} onChange={(e) => setTopic(e.target.value)} />
                             </div>
 
-                            <div className="bg-white rounded-3xl border border-slate-100 flex-1 flex flex-col overflow-hidden shadow-sm min-h-[300px]">
-                                <div className="px-5 py-3 bg-slate-50 border-b flex justify-between items-center text-[9px] font-black uppercase text-slate-400 tracking-widest">
-                                    <span>Live Transcription</span>
-                                    <button onClick={() => setTranscript('')} className="text-red-300">Clear</button>
+                            <div className="bg-white rounded-[2rem] border border-slate-100 flex-1 flex flex-col overflow-hidden shadow-sm min-h-[300px]">
+                                <div className="px-6 py-4 bg-slate-50 border-b flex justify-between items-center text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                                    <span>Live Transcript</span>
+                                    <button onClick={() => setTranscript('')} className="text-slate-300 hover:text-red-400 transition-all">Clear</button>
                                 </div>
-                                <textarea className="w-full flex-1 p-6 text-base font-bold text-slate-700 outline-none resize-none bg-transparent" placeholder="Words will appear here as you speak..." value={transcript + interimTranscript} onChange={(e) => setTranscript(e.target.value)} />
-                                <div className="p-4 bg-slate-50 border-t">
-                                    <button onClick={analyze} disabled={loading || !(transcript + interimTranscript).trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] shadow-lg shadow-indigo-100 disabled:opacity-20 transition-all">
-                                        {loading ? <div className="flex items-center justify-center gap-2"><div className="spinner"></div>Analysing...</div> : "Generate Mentor Report"}
+                                <textarea className="w-full flex-1 p-8 text-base font-bold text-slate-700 outline-none resize-none bg-transparent" placeholder="Talk or paste notes here..." value={transcript + interimTranscript} onChange={(e) => setTranscript(e.target.value)} />
+                                <div className="p-6 bg-slate-50 border-t">
+                                    <button onClick={handleAnalyze} disabled={isLoading || !(transcript + interimTranscript).trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-[11px] shadow-lg shadow-indigo-100 disabled:opacity-20 transition-all active:scale-95">
+                                        {isLoading ? "Consulting AI Mentor..." : "Generate Mentor Report"}
                                     </button>
                                 </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-4 pb-10 fade-in">
-                            <button 
-                                onClick={sendEmail} 
-                                disabled={emailStatus === 'sending'} 
-                                className={`w-full py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl transition-all active:scale-95 ${emailStatus === 'sent' ? 'bg-emerald-500 text-white success-pulse' : 'bg-indigo-600 text-white'}`}
-                            >
-                                {emailStatus === 'sending' ? 'Transmitting...' : emailStatus === 'sent' ? '✓ Recap Sent Successfully' : emailStatus === 'error' ? 'Delivery Error - Mail App Opening' : 'Email Executive Recap'}
+                        <div className="space-y-5 fade-in">
+                            <button onClick={sendEmail} disabled={emailStatus === 'sending'} className={`w-full py-5 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl transition-all active:scale-95 ${emailStatus === 'sent' ? 'bg-emerald-500 text-white success-pulse' : 'bg-indigo-600 text-white'}`}>
+                                {emailStatus === 'sending' ? 'Transmitting...' : emailStatus === 'sent' ? '✓ Recap Sent Successfully' : 'Email Executive Recap'}
                             </button>
-                            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                                <h3 className="text-[9px] font-black text-indigo-600 uppercase mb-4 border-b-2 border-indigo-50 pb-1 inline-block italic">1. Executive Summary</h3>
-                                <p className="text-base text-slate-800 font-bold italic leading-relaxed">"{analysis.summary}"</p>
-                            </div>
-                            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-                                <h3 className="text-[9px] font-black text-emerald-600 uppercase mb-4 border-b-2 border-emerald-50 pb-1 inline-block italic">2. Action Items</h3>
-                                <div className="text-sm font-bold text-slate-700 whitespace-pre-line leading-relaxed italic">{analysis.actions}</div>
-                            </div>
-                            <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl border-4 border-indigo-600/10">
-                                <h3 className="text-[9px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2 italic">Sales Mentor Feedback</h3>
-                                <p className="text-xl font-light italic leading-relaxed text-indigo-50 tracking-tight whitespace-pre-line">{analysis.mentorship}</p>
-                            </div>
+                            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm"><h3 className="text-[10px] font-black text-indigo-600 uppercase mb-4 border-b-2 border-indigo-50 pb-1 inline-block italic">1. Executive Summary</h3><p className="text-base text-slate-800 font-bold italic leading-relaxed">"{analysis.summary}"</p></div>
+                            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm"><h3 className="text-[10px] font-black text-emerald-600 uppercase mb-4 border-b-2 border-emerald-50 pb-1 inline-block italic">2. Action Items</h3><div className="text-sm font-bold text-slate-700 whitespace-pre-line leading-relaxed italic">{analysis.actions}</div></div>
+                            <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl border-4 border-indigo-600/10"><h3 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2 italic">Sales Mentor Feedback</h3><p className="text-xl font-light italic leading-relaxed text-indigo-50 tracking-tight whitespace-pre-line">{analysis.mentorship}</p></div>
                         </div>
                     )}
                 </div>
