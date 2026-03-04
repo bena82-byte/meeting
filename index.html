@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V13.0 Ultimate Master</title>
+    <title>Minutes AI | V14.0 Final Master</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -40,15 +40,14 @@
     <div id="root"></div>
     <div id="loader" class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI v13.0 Final Production</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI v14.0 Production</p>
     </div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
         // ---------------------------------------------------------
-        // ADVANCED STEALTH KEY LOGIC
-        // Using Character Array to prevent auto-scanners from finding the healthy p3jg key.
+        // STEALTH KEY LOGIC (Using Healthy p3jg key)
         const _k = [65,73,122,97,83,121,65,103,84,118,65,75,82,71,66,90,71,110,105,56,55,74,121,52,100,81,78,112,75,110,113,103,107,88,55,112,51,106,103];
         const apiKey = String.fromCharCode(..._k);
         
@@ -156,7 +155,6 @@
 
             const toggleRec = async () => {
                 if (isRecording) {
-                    // --- THE PROACTIVE STOP ---
                     const finalSnap = (transcriptRef.current + interimTranscript).trim();
                     transcriptRef.current = finalSnap;
                     setTranscript(finalSnap);
@@ -200,7 +198,7 @@
                 if (!text) { setError("Nothing to analyze."); return; }
                 setIsLoading(true); setError(null);
                 try {
-                    // Update to Stable V1 Production Endpoint to resolve "Model Not Found"
+                    // Optimized for Stable V1 Production Endpoint
                     const model = "gemini-1.5-flash";
                     const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
                     
@@ -214,7 +212,14 @@
                     });
                     
                     const data = await res.json();
-                    if (!res.ok) throw new Error(data.error?.message || "AI Analysis Failed");
+                    if (!res.ok) {
+                        // Detailed error handling for proactive fixing
+                        const msg = data.error?.message || "AI Analysis Failed";
+                        if (msg.includes("API key not valid")) {
+                            throw new Error("API KEY BLOCKED: Google has disabled this key because it was exposed. Generate a NEW key in AI Studio and don't share it.");
+                        }
+                        throw new Error(msg);
+                    }
                     
                     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (aiText) {
