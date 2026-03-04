@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V3.7 Final Production Master</title>
+    <title>Minutes AI | V3.8 Production Master</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -29,7 +29,7 @@
     <div id="root"></div>
     <div class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.7 Master...</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.8 Production...</p>
     </div>
 
     <script type="text/babel">
@@ -76,7 +76,6 @@
                 if (CONFIG.EMAILJS_KEY) {
                     try { emailjs.init(CONFIG.EMAILJS_KEY); } catch (e) {}
                 }
-                
                 setupRecognition();
             }, []);
 
@@ -89,14 +88,17 @@
                     rec.lang = 'en-US';
                     
                     rec.onresult = (e) => {
-                        // REJECTION CHECK: Hard block if recording state is false
+                        // REJECTION CHECK: Hard block if recording state is false to stop ghost words
                         if (!isRecordingRef.current) return;
                         
                         let final = '';
                         let interim = '';
                         for (let i = e.resultIndex; i < e.results.length; ++i) {
-                            if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
-                            else interim += e.results[i][0].transcript;
+                            if (e.results[i].isFinal) {
+                                final += e.results[i][0].transcript + ' ';
+                            } else {
+                                interim += e.results[i][0].transcript;
+                            }
                         }
                         if (final) setTranscript(prev => prev + final);
                         setInterimTranscript(interim);
@@ -115,33 +117,29 @@
             const toggleRec = async () => {
                 if (isRecording) {
                     // --- HARD STOP SEQUENCE ---
+                    // 1. Flip master switch immediately to reject incoming ghost results
                     isRecordingRef.current = false;
                     setIsRecording(false);
                     
+                    // 2. Kill speech engine
                     if (recognitionRef.current) {
-                        // Wiping listeners to prevent ghost results during shutdown
-                        recognitionRef.current.onresult = null;
-                        recognitionRef.current.onend = null;
                         recognitionRef.current.abort(); // Immediate kill
                     }
                     
+                    // 3. Close audio hardware context to stop bouncing bars
                     if (streamRef.current) {
                         streamRef.current.getTracks().forEach(t => t.stop());
                     }
-                    
-                    if (sourceRef.current) {
-                        sourceRef.current.disconnect();
-                    }
-
                     if (audioCtxRef.current) {
                         audioCtxRef.current.close();
                     }
                     
-                    // Clear all temporary text immediately
+                    // 4. PRESERVE TEXT: Merge interim words into main transcript so the box doesn't clear
+                    setTranscript(prev => prev + interimTranscript);
                     setInterimTranscript('');
                     setVols(new Array(12).fill(0));
                     
-                    // Re-instantiate recognition for next use
+                    // 5. Reset engine for next session
                     setupRecognition();
                 } else {
                     // --- START SEQUENCE ---
@@ -192,14 +190,14 @@
                 const fetchWithRetry = async (retry = 0) => {
                     const delays = [1000, 2000, 4000, 8000, 16000];
                     try {
-                        // Environment API Path
+                        // Mandatory Environment Endpoint and Payload Format
                         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
                         const res = await fetch(url, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
                                 contents: [{ parts: [{ text: fullText }] }],
-                                // FIX: Use camelCase systemInstruction for environment payload
+                                // Environment Protocol: camelCase systemInstruction
                                 systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }
                             })
                         });
@@ -207,7 +205,7 @@
                         if (!res.ok) throw new Error(data.error?.message || "AI Connection Error");
                         return data;
                     } catch (e) {
-                        if (retry < 4) {
+                        if (retry < 5) {
                             await new Promise(r => setTimeout(r, delays[retry]));
                             return fetchWithRetry(retry + 1);
                         }
@@ -258,7 +256,7 @@
                     if (result.status === 200) {
                         setEmailStatus('sent');
                         setTimeout(() => setEmailStatus('idle'), 5000);
-                    } else { throw new Error("Email provider rejected"); }
+                    } else { throw new Error("Email provider rejected request"); }
                 } catch (e) {
                     setEmailStatus('error');
                     setError("Email service failed. Opening your device mail app...");
@@ -271,7 +269,7 @@
                 <div className="max-w-md mx-auto min-h-screen flex flex-col pt-4 pb-10 px-4">
                     <header className="flex justify-between items-center mb-8">
                         <div className="flex items-center gap-2">
-                            <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg">
+                            <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-100">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
                             </div>
                             <h1 className="font-black italic text-lg text-slate-800 tracking-tighter uppercase leading-none">MINUTES AI</h1>
@@ -314,7 +312,7 @@
                                 <textarea className="w-full flex-1 p-6 text-base font-bold text-slate-700 outline-none resize-none bg-transparent" placeholder="Words will appear here as you speak..." value={transcript + interimTranscript} onChange={(e) => setTranscript(e.target.value)} />
                                 <div className="p-4 bg-slate-50 border-t">
                                     <button onClick={analyze} disabled={loading || !(transcript + interimTranscript).trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] shadow-lg shadow-indigo-100 disabled:opacity-20 transition-all">
-                                        {loading ? <div className="flex items-center justify-center gap-2"><div className="spinner"></div>Consulting AI Mentor...</div> : "Generate Mentor Report"}
+                                        {loading ? <div className="flex items-center justify-center gap-2"><div className="spinner"></div>Analysing...</div> : "Generate Mentor Report"}
                                     </button>
                                 </div>
                             </div>
