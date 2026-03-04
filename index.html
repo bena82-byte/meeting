@@ -36,6 +36,7 @@
         const { useState, useEffect, useRef, useCallback } = React;
 
         // ENVIRONMENT CONFIG
+        // Note: For GitHub deployment, manually paste your API key between the quotes below.
         const apiKey = ""; 
         const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
 
@@ -50,7 +51,7 @@
             # ROLE
             You are the "Minutes AI Sales Mentor." Analyze sales transcripts to generate:
             1. EXECUTIVE SUMMARY: High-level recap & sentiment.
-            2. EXPLICIT ACTION ITEMS: [Owner] - [Task] - [Due Date].
+            2. EXPLICIT ACTION ITEMS: [Owner] - [Task] - [Due Date]. Be specific.
             3. PROACTIVE SUGGESTIONS: 2-3 specific follow-up items.
             4. PERFORMANCE MENTORSHIP: Analysis of Discovery, Objection Handling, and Delivery.
         `;
@@ -224,7 +225,7 @@
                             <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
                             </div>
-                            <h1 className="font-black italic text-lg text-slate-800 tracking-tighter uppercase">MINUTES AI</h1>
+                            <h1 className="font-black italic text-lg text-slate-800 tracking-tighter uppercase leading-none">MINUTES AI</h1>
                         </div>
                         <div className="flex bg-slate-200 p-1 rounded-xl shadow-inner">
                             <button onClick={() => setView('input')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${view === 'input' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>REC</button>
