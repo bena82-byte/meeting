@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V5.1 Final Production</title>
+    <title>Minutes AI | V8.0 Final Production</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -13,26 +13,16 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; background: #f8fafc; overflow-x: hidden; touch-action: manipulation; }
-        
         .loading-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #fff; position: fixed; inset: 0; z-index: 9999; transition: opacity 0.4s ease; }
         .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #6366f1; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         #root:not(:empty) + .loading-screen { display: none; }
-        
         input, textarea { font-size: 16px !important; }
         .vol-bar { transition: height 0.1s ease-out; min-height: 4px; border-radius: 99px; }
-        
         .fade-in { animation: fadeIn 0.4s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
         .success-pulse { animation: successPulse 2s infinite; }
-        @keyframes successPulse { 
-            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 
-            70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 
-            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } 
-        }
-
-        .custom-scroll { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+        @keyframes successPulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
         .custom-scroll::-webkit-scrollbar { width: 5px; }
         .custom-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
     </style>
@@ -41,15 +31,15 @@
     <div id="root"></div>
     <div id="loader" class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Minutes AI v5.1 Production</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Minutes AI v8.0 Production</p>
     </div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
         // ---------------------------------------------------------
-        // PRODUCTION CREDENTIALS
-        const apiKey = "AIzaSyAqqqiTHnkdBQipDwnsaXp931Uvx_IV3Ds"; 
+        // PRODUCTION CREDENTIALS - HEALTHY KEY ENDING IN p3jg
+        const apiKey = "AIzaSyAgTvAKRGBZGni87Jy4dQNpKnqgkX7p3jg"; 
         
         const CONFIG = {
             EMAILJS_SERVICE: "service_u54bof7",
@@ -61,10 +51,10 @@
 
         const SYSTEM_PROMPT = `
             # ROLE
-            Elite Sales Performance Mentor. Analyze the meeting transcript to produce:
-            1. EXECUTIVE SUMMARY: Professional recap and mood analysis.
+            Elite Sales Performance Mentor. Analyze the sales transcript to produce:
+            1. EXECUTIVE SUMMARY: Professional recap and sentiment analysis.
             2. EXPLICIT ACTION ITEMS: [Owner] - [Task] - [Due Date].
-            3. PROACTIVE SUGGESTIONS: 2-3 items to accelerate the deal.
+            3. PROACTIVE SUGGESTIONS: 2-3 specific follow-up items to move the deal forward.
             4. PERFORMANCE COACHING: Analysis of Discovery, Objections, and Delivery.
         `;
 
@@ -95,7 +85,6 @@
                         setTimeout(() => loader.style.display = 'none', 400);
                     }, 600);
                 }
-
                 if (CONFIG.EMAILJS_KEY) emailjs.init(CONFIG.EMAILJS_KEY);
                 setupSpeechEngine();
                 return () => forceStopAll();
@@ -116,6 +105,7 @@
                 rec.lang = 'en-US';
 
                 rec.onresult = (e) => {
+                    // MASTER KILL SWITCH: If the button was clicked, ignore audio data immediately
                     if (!isRecordingRef.current) return;
                     
                     let finalBlock = '';
@@ -158,11 +148,12 @@
 
             const toggleRec = async () => {
                 if (isRecording) {
-                    // --- THE PROACTIVE STOP ---
+                    // --- 1. CAPTURE DATA FIRST ---
                     const currentAll = (transcriptRef.current + interimTranscript).trim();
                     transcriptRef.current = currentAll;
                     setTranscript(currentAll);
                     
+                    // --- 2. KILL HARDWARE ---
                     forceStopAll();
                     setIsRecording(false);
                     setInterimTranscript('');
@@ -197,7 +188,7 @@
                         
                         recognitionRef.current?.start();
                     } catch (e) {
-                        setError("Microphone error. Please check your browser permissions.");
+                        setError("Microphone error. Check browser permissions.");
                     }
                 }
             };
@@ -205,7 +196,7 @@
             const handleAnalyze = async () => {
                 const fullText = transcriptRef.current.trim();
                 if (!fullText) {
-                    setError("Please record a transcript before generating a report.");
+                    setError("No transcript found. Please record some audio first.");
                     return;
                 }
                 
@@ -228,12 +219,8 @@
                         
                         const data = await res.json();
                         
-                        // PROACTIVE ERROR HANDLING:
                         if (!res.ok) {
-                            if (data.error?.status === "PERMISSION_DENIED") {
-                                throw new Error("API Key Permission Denied. Ensure 'Generative Language API' is enabled in your Google Cloud Console.");
-                            }
-                            throw new Error(data.error?.message || "AI Connection Lost");
+                            throw new Error(data.error?.message || "AI Connection Error");
                         }
                         return data;
                     } catch (e) {
@@ -250,13 +237,13 @@
                     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (aiText) {
                         const sections = { summary: "", actions: "", suggestions: "", coaching: "" };
-                        const parts = aiText.split(/(?=1\.|2\.|3\.|4\.|SUMMARY|ACTION|SUGGESTION|COACHING|MENTORSHIP)/i);
+                        const parts = aiText.split(/(?=1\.|2\.|3\.|4\.|SUMMARY|ACTION|SUGGESTION|COACHING|MENTORSHIP|FEEDBACK)/i);
                         parts.forEach(p => {
                             const c = p.trim();
                             if (/1\.|SUMMARY/i.test(c)) sections.summary = c.replace(/.*SUMMARY:?|1\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
                             if (/2\.|ACTION/i.test(c)) sections.actions = c.replace(/.*ACTION:?|2\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
                             if (/3\.|SUGGESTION/i.test(c)) sections.suggestions = c.replace(/.*SUGGESTION:?|3\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
-                            if (/4\.|COACHING|MENTORSHIP/i.test(c)) sections.coaching = c.replace(/.*COACHING:?|MENTORSHIP:?|4\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
+                            if (/4\.|COACHING|MENTORSHIP|FEEDBACK/i.test(c)) sections.coaching = c.replace(/.*COACHING:?|MENTORSHIP:?|FEEDBACK:?|4\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
                         });
                         setAnalysis(sections);
                         setView('analysis');
@@ -272,7 +259,7 @@
                 setEmailStatus('sending');
                 try {
                     await emailjs.send(CONFIG.EMAILJS_SERVICE, CONFIG.EMAILJS_TEMPLATE, {
-                        "Discussion Topic": topic || "Executive Sales Call",
+                        "Discussion Topic": topic || "Elite Sales Meeting",
                         summary: analysis.summary,
                         action_items: analysis.actions,
                         suggestions: analysis.suggestions,
@@ -284,7 +271,7 @@
                     setTimeout(() => setEmailStatus('idle'), 5000);
                 } catch (e) {
                     setEmailStatus('error');
-                    window.location.href = `mailto:${CONFIG.TARGET_EMAIL}?subject=${encodeURIComponent(topic || 'Recap')}&body=${encodeURIComponent(analysis.summary)}`;
+                    window.location.href = `mailto:${CONFIG.TARGET_EMAIL}?subject=${encodeURIComponent(topic || 'Sales Recap')}&body=${encodeURIComponent(analysis.summary)}`;
                 }
             };
 
@@ -294,7 +281,7 @@
                     
                     <header className="flex justify-between items-center mb-10">
                         <div className="flex items-center gap-2">
-                            <div className="bg-indigo-600 p-2.5 rounded-2xl text-white shadow-lg shadow-indigo-100"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></div>
+                            <div className="bg-indigo-600 p-2.5 rounded-2xl text-white shadow-lg"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></div>
                             <h1 className="font-black italic text-xl tracking-tighter uppercase text-slate-800 leading-none">MINUTES AI</h1>
                         </div>
                         <div className="flex bg-slate-200 p-1.5 rounded-2xl shadow-inner">
@@ -316,7 +303,7 @@
                                     {isRecording ? <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="5" y="5" rx="2" ry="2"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>}
                                     <span className={`text-[10px] font-black uppercase mt-3 tracking-widest ${isRecording ? 'text-white' : 'text-slate-400'}`}>{isRecording ? "Stop" : "Record"}</span>
                                 </button>
-                                <input type="text" placeholder="Subject..." className="mt-8 w-full text-center bg-transparent border-b border-slate-100 py-3 text-sm font-bold focus:border-indigo-400 outline-none uppercase tracking-widest placeholder:text-slate-300" value={topic} onChange={(e) => setTopic(e.target.value)} />
+                                <input type="text" placeholder="Topic..." className="mt-8 w-full text-center bg-transparent border-b border-slate-100 py-3 text-sm font-bold focus:border-indigo-400 outline-none uppercase tracking-widest placeholder:text-slate-300" value={topic} onChange={(e) => setTopic(e.target.value)} />
                             </div>
 
                             <div className="bg-white rounded-[2.5rem] border border-slate-100 flex-1 flex flex-col overflow-hidden shadow-sm min-h-[350px]">
@@ -332,7 +319,7 @@
                                 />
                                 <div className="p-6 bg-slate-50 border-t">
                                     <button onClick={handleAnalyze} disabled={isLoading || !(transcript + interimTranscript).trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-[1.5rem] uppercase tracking-widest text-[11px] shadow-lg shadow-indigo-100 disabled:opacity-20 transition-all active:scale-95">
-                                        {isLoading ? "Mentor Analyzing..." : "Generate Mentor Report"}
+                                        {isLoading ? "Consulting Mentor..." : "Generate Mentor Report"}
                                     </button>
                                 </div>
                             </div>
@@ -344,7 +331,7 @@
                             </button>
                             <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm"><h3 className="text-[10px] font-black text-indigo-600 uppercase mb-4 border-b-2 border-indigo-50 pb-1 inline-block italic">1. Executive Summary</h3><p className="text-base text-slate-800 font-bold italic leading-relaxed">"{analysis.summary}"</p></div>
                             <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm"><h3 className="text-[10px] font-black text-emerald-600 uppercase mb-4 border-b-2 border-emerald-50 pb-1 inline-block italic">2. Action Items</h3><div className="text-sm font-bold text-slate-700 whitespace-pre-line leading-relaxed italic">{analysis.actions}</div></div>
-                            <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl border-4 border-indigo-600/10"><h3 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2 italic text-indigo-400">Sales Mentor Performance Analysis</h3><p className="text-xl font-light italic leading-relaxed text-indigo-100 tracking-tight whitespace-pre-line">{analysis.coaching}</p></div>
+                            <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl border-4 border-indigo-600/10"><h3 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2 italic text-indigo-400">Sales Mentor Performance Analysis</h3><p className="text-xl font-light italic leading-relaxed text-indigo-50 tracking-tight whitespace-pre-line">{analysis.coaching}</p></div>
                         </div>
                     )}
                 </div>
@@ -354,4 +341,3 @@
         root.render(<App />);
     </script>
 </body>
-</html>
