@@ -48,7 +48,7 @@
 
         // ---------------------------------------------------------
         // PRODUCTION CONFIGURATION
-        // The execution environment provides the key securely at runtime.
+        // Auto-injected by the environment. No pasting required.
         const apiKey = "";
         
         const CONFIG = {
@@ -59,21 +59,10 @@
         };
         // ---------------------------------------------------------
 
-        const SYSTEM_PROMPT = `
-            # ROLE
-            Elite Sales Performance Mentor. You analyze sales transcripts to produce high-impact recap reports.
-            
-            # OUTPUT FORMAT
-            1. EXECUTIVE SUMMARY: Professional recap and client sentiment.
-            2. EXPLICIT ACTION ITEMS: [Owner] - [Task] - [Due Date].
-            3. PROACTIVE SUGGESTIONS: 2-3 specific follow-up items to move the deal forward.
-            4. PERFORMANCE COACHING: Brutally honest feedback on Discovery and Delivery.
-        `;
-
         function App() {
             const [transcript, setTranscript] = useState('');
             const [interimTranscript, setInterimTranscript] = useState('');
-            const [analysis, setAnalysis] = useState(null);
+            const [analysis, setAnalysis] = useState(null); // Restored to 4-part object
             const [isRecording, setIsRecording] = useState(false);
             const [isLoading, setIsLoading] = useState(false);
             const [emailStatus, setEmailStatus] = useState('idle'); 
@@ -199,19 +188,30 @@
                 setIsLoading(true); 
                 setError(null);
                 
+                // BULLETPROOF PROMPT: Merged to avoid API schema errors, but strictly formatted 
+                // to allow perfect slicing for your EmailJS template.
+                const fullPrompt = `You are an Elite Sales Performance Mentor. Analyze the following meeting transcript.
+Please provide your report in EXACTLY 4 sections, numbered 1 through 4. Do not use markdown headers, just use the exact numbers and titles below:
+
+1. EXECUTIVE SUMMARY: (Professional recap and client sentiment)
+2. ACTION ITEMS: (Format: Owner - Task - Due Date)
+3. PROACTIVE SUGGESTIONS: (2-3 items to move the deal forward)
+4. PERFORMANCE COACHING: (Honest feedback on Discovery and Delivery)
+
+==== MEETING TRANSCRIPT ====
+${text}`;
+
                 const callAI = async (retry = 0) => {
-                    // Exponential backoff to ensure connection stability
+                    // Exponential backoff
                     const delays = [1000, 2000, 4000, 8000, 16000];
-                    const model = "gemini-2.5-flash-preview-09-2025";
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
                     
                     try {
                         const res = await fetch(url, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
-                                contents: [{ parts: [{ text: text }] }],
-                                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }
+                                contents: [{ parts: [{ text: fullPrompt }] }]
                             })
                         });
                         
@@ -221,7 +221,7 @@
                         }
                         return data;
                     } catch (e) {
-                        if (retry < delays.length) {
+                        if (retry < 5) {
                             await new Promise(r => setTimeout(r, delays[retry]));
                             return callAI(retry + 1);
                         }
@@ -234,22 +234,26 @@
                     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     
                     if (aiText) {
+                        // RESTORED 4-PART PARSING: Slices the AI text back into distinct variables 
+                        // so your EmailJS template receives the exact format you set up.
                         const sections = { summary: "", actions: "", suggestions: "", coaching: "" };
-                        const parts = aiText.split(/(?=1\.|2\.|3\.|4\.|SUMMARY|ACTION|SUGGESTION|COACHING|MENTORSHIP)/i);
+                        const parts = aiText.split(/(?=1\.|2\.|3\.|4\.|EXECUTIVE SUMMARY|ACTION ITEMS|PROACTIVE SUGGESTIONS|PERFORMANCE COACHING)/i);
+                        
                         parts.forEach(p => {
                             const c = p.trim();
-                            if (/1\.|SUMMARY/i.test(c)) sections.summary = c.replace(/.*SUMMARY:?|1\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
-                            if (/2\.|ACTION/i.test(c)) sections.actions = c.replace(/.*ACTION:?|2\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
-                            if (/3\.|SUGGESTION/i.test(c)) sections.suggestions = c.replace(/.*SUGGESTION:?|3\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
-                            if (/4\.|COACHING|MENTORSHIP/i.test(c)) sections.coaching = c.replace(/.*COACHING:?|MENTORSHIP:?|4\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
+                            if (/1\.|EXECUTIVE SUMMARY/i.test(c)) sections.summary = c.replace(/.*EXECUTIVE SUMMARY:?|1\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
+                            if (/2\.|ACTION ITEMS?/i.test(c)) sections.actions = c.replace(/.*ACTION ITEMS?:?|2\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
+                            if (/3\.|PROACTIVE SUGGESTIONS?/i.test(c)) sections.suggestions = c.replace(/.*PROACTIVE SUGGESTIONS?:?|3\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
+                            if (/4\.|PERFORMANCE COACHING/i.test(c)) sections.coaching = c.replace(/.*PERFORMANCE COACHING:?|4\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
                         });
+                        
                         setAnalysis(sections);
                         setView('analysis');
                     } else {
-                        throw new Error("AI returned an empty or invalid response.");
+                        throw new Error("AI returned an empty response.");
                     }
                 } catch (e) { 
-                    setError("AI Connection Error. Please try again."); 
+                    setError(`Analysis Error: ${e.message}`); 
                 }
                 setIsLoading(false);
             };
@@ -258,6 +262,7 @@
                 if (!analysis) return;
                 setEmailStatus('sending');
                 try {
+                    // RESTORED EMAIL MAPPING: Each section mapped perfectly to your template variables.
                     await emailjs.send(CONFIG.EMAILJS_SERVICE, CONFIG.EMAILJS_TEMPLATE, {
                         "Discussion Topic": topic || "Executive Sales Call",
                         summary: analysis.summary,
@@ -288,7 +293,8 @@
                             <button onClick={() => analysis && setView('analysis')} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!analysis ? 'opacity-30' : ''} ${view === 'analysis' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>REPORT</button>
                         </div>
                     </header>
-                    {error && <div className="mb-6 p-5 bg-red-50 border border-red-200 rounded-[2rem] text-[10px] font-bold text-red-600 uppercase leading-tight fade-in">{error}</div>}
+                    {error && <div className="mb-6 p-5 bg-red-50 border border-red-200 rounded-[2rem] text-[12px] font-bold text-red-600 leading-tight fade-in">{error}</div>}
+                    
                     {view === 'input' ? (
                         <div className="space-y-6 flex-1 flex flex-col fade-in">
                             <div className="bg-white rounded-[4rem] border border-slate-100 p-12 text-center shadow-sm relative overflow-hidden group">
@@ -307,10 +313,10 @@
                                     <span>Live Transcript</span>
                                     <button onClick={() => { transcriptRef.current = ''; setTranscript(''); }} className="text-slate-300">Clear</button>
                                 </div>
-                                <textarea className="w-full flex-1 p-8 text-base font-bold text-slate-700 outline-none resize-none bg-transparent custom-scroll" placeholder="Transcript will lock here once you press Stop..." value={transcript + interimTranscript} onChange={(e) => { transcriptRef.current = e.target.value; setTranscript(e.target.value); }} />
+                                <textarea className="w-full flex-1 p-8 text-base font-medium text-slate-700 outline-none resize-none bg-transparent custom-scroll leading-relaxed" placeholder="Transcript will lock here once you press Stop..." value={transcript + interimTranscript} onChange={(e) => { transcriptRef.current = e.target.value; setTranscript(e.target.value); }} />
                                 <div className="p-6 bg-slate-50 border-t">
                                     <button onClick={runAnalysis} disabled={isLoading || !(transcript + interimTranscript).trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-[1.5rem] uppercase tracking-widest text-[11px] shadow-lg shadow-indigo-100 disabled:opacity-20 transition-all active:scale-95">
-                                        {isLoading ? "Mentor Consulting..." : "Generate Performance Report"}
+                                        {isLoading ? "Mentor Analyzing..." : "Generate Performance Report"}
                                     </button>
                                 </div>
                             </div>
@@ -320,9 +326,24 @@
                             <button onClick={sendEmail} disabled={emailStatus === 'sending'} className={`w-full py-6 rounded-[1.5rem] text-[11px] font-black uppercase tracking-widest shadow-xl transition-all active:scale-95 ${emailStatus === 'sent' ? 'bg-emerald-500 text-white success-pulse' : 'bg-indigo-600 text-white'}`}>
                                 {emailStatus === 'sending' ? 'Transmitting...' : emailStatus === 'sent' ? '✓ Recap Sent Successfully' : 'Send Executive Recap'}
                             </button>
-                            <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm"><h3 className="text-[10px] font-black text-indigo-600 uppercase mb-4 border-b-2 border-indigo-50 pb-1 inline-block italic">1. Executive Summary</h3><p className="text-base text-slate-800 font-bold italic leading-relaxed">"{analysis.summary}"</p></div>
-                            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm"><h3 className="text-[10px] font-black text-emerald-600 uppercase mb-4 border-b-2 border-emerald-50 pb-1 inline-block italic">2. Action Items</h3><div className="text-sm font-bold text-slate-700 whitespace-pre-line leading-relaxed italic">{analysis.actions}</div></div>
-                            <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl border-4 border-indigo-600/10"><h3 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2 italic text-indigo-400">Sales Mentor Performance Analysis</h3><p className="text-xl font-light italic leading-relaxed text-indigo-100 tracking-tight whitespace-pre-line">{analysis.coaching}</p></div>
+                            
+                            {/* RESTORED UI CARDS: Exactly displaying what goes into the email */}
+                            <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
+                                <h3 className="text-[10px] font-black text-indigo-600 uppercase mb-4 border-b-2 border-indigo-50 pb-1 inline-block italic">1. Executive Summary</h3>
+                                <p className="text-base text-slate-800 font-bold italic leading-relaxed">"{analysis.summary}"</p>
+                            </div>
+                            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+                                <h3 className="text-[10px] font-black text-emerald-600 uppercase mb-4 border-b-2 border-emerald-50 pb-1 inline-block italic">2. Action Items</h3>
+                                <div className="text-sm font-bold text-slate-700 whitespace-pre-line leading-relaxed italic">{analysis.actions}</div>
+                            </div>
+                            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+                                <h3 className="text-[10px] font-black text-amber-600 uppercase mb-4 border-b-2 border-amber-50 pb-1 inline-block italic">3. Proactive Suggestions</h3>
+                                <div className="text-sm font-bold text-slate-700 whitespace-pre-line leading-relaxed italic">{analysis.suggestions}</div>
+                            </div>
+                            <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl border-4 border-indigo-600/10">
+                                <h3 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2 italic">Sales Mentor Performance Analysis</h3>
+                                <p className="text-xl font-light italic leading-relaxed text-indigo-100 tracking-tight whitespace-pre-line">{analysis.coaching}</p>
+                            </div>
                         </div>
                     )}
                 </div>
