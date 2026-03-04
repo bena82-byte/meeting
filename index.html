@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V14.0 Final Master</title>
+    <title>Minutes AI | V15.0 Final Production</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -40,7 +40,7 @@
     <div id="root"></div>
     <div id="loader" class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI v14.0 Production</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI v15.0 Production</p>
     </div>
 
     <script type="text/babel">
@@ -198,8 +198,8 @@
                 if (!text) { setError("Nothing to analyze."); return; }
                 setIsLoading(true); setError(null);
                 try {
-                    // Optimized for Stable V1 Production Endpoint
                     const model = "gemini-1.5-flash";
+                    // Using the stable V1 endpoint
                     const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${apiKey}`;
                     
                     const res = await fetch(url, {
@@ -207,17 +207,14 @@
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                             contents: [{ parts: [{ text: text }] }],
-                            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }
+                            // Fixed: must use system_instruction (snake_case) for the REST API v1
+                            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] }
                         })
                     });
                     
                     const data = await res.json();
                     if (!res.ok) {
-                        // Detailed error handling for proactive fixing
                         const msg = data.error?.message || "AI Analysis Failed";
-                        if (msg.includes("API key not valid")) {
-                            throw new Error("API KEY BLOCKED: Google has disabled this key because it was exposed. Generate a NEW key in AI Studio and don't share it.");
-                        }
                         throw new Error(msg);
                     }
                     
