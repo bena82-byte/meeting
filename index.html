@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V3.3 Production Master</title>
+    <title>Minutes AI | V3.4 Production Master</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -29,16 +29,15 @@
     <div id="root"></div>
     <div class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.3 Final...</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.4 Production...</p>
     </div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback } = React;
 
         // ENVIRONMENT CONFIG
-        // REMINDER: For GitHub, paste your Gemini API Key in the quotes below.
+        // The execution environment provides the key at runtime.
         const apiKey = ""; 
-        const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
 
         const CONFIG = {
             EMAILJS_SERVICE: "service_u54bof7",
@@ -51,7 +50,7 @@
             # ROLE
             You are the "Minutes AI Sales Mentor." Analyze sales transcripts to generate:
             1. EXECUTIVE SUMMARY: High-level recap & sentiment.
-            2. EXPLICIT ACTION ITEMS: [Owner] - [Task] - [Due Date].
+            2. EXPLICIT ACTION ITEMS: [Owner] - [Task] - [Due Date]. Be specific.
             3. PROACTIVE SUGGESTIONS: 2-3 specific follow-up items.
             4. PERFORMANCE MENTORSHIP: Analysis of Discovery, Objection Handling, and Delivery.
         `;
@@ -77,7 +76,6 @@
                 if (CONFIG.EMAILJS_KEY) {
                     try {
                         emailjs.init(CONFIG.EMAILJS_KEY);
-                        console.log("EmailJS Initialized");
                     } catch (e) {
                         console.error("EmailJS Init Failed", e);
                     }
@@ -162,13 +160,14 @@
                 const fetchWithRetry = async (retry = 0) => {
                     const delays = [1000, 2000, 4000, 8000, 16000];
                     try {
-                        const currentKey = apiKey || ""; // Uses environment key or local fallback
-                        const res = await fetch(`${API_URL}?key=${currentKey}`, {
+                        // Environment-specific URL and Payload formatting
+                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
                                 contents: [{ parts: [{ text: fullText }] }],
-                                system_instruction: { parts: [{ text: SYSTEM_PROMPT }] }
+                                // Environment requires systemInstruction (camelCase)
+                                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }
                             })
                         });
                         const data = await res.json();
@@ -188,18 +187,21 @@
                     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (aiText) {
                         const sections = { summary: "", actions: "", suggestions: "", mentorship: "" };
-                        const parts = aiText.split(/(?=1\.|2\.|3\.|4\.|SUMMARY|ACTION|SUGGESTION|MENTORSHIP|FEEDBACK)/i);
+                        // Improved regex to handle markdown formatting often used by AI
+                        const parts = aiText.split(/(?=1\.|2\.|3\.|4\.|SUMMARY|ACTION|SUGGESTION|MENTORSHIP|FEEDBACK|\*\*SUMMARY|\*\*ACTION)/i);
                         parts.forEach(p => {
                             const c = p.trim();
-                            if (/1\.|SUMMARY/i.test(c)) sections.summary = c.replace(/.*SUMMARY:?|1\./i, '').trim();
-                            if (/2\.|ACTION/i.test(c)) sections.actions = c.replace(/.*ACTION:?|2\./i, '').trim();
-                            if (/3\.|SUGGESTION/i.test(c)) sections.suggestions = c.replace(/.*SUGGESTION:?|3\./i, '').trim();
-                            if (/4\.|MENTORSHIP|FEEDBACK/i.test(c)) sections.mentorship = c.replace(/.*MENTORSHIP:?|FEEDBACK:?|4\./i, '').trim();
+                            if (/1\.|SUMMARY/i.test(c)) sections.summary = c.replace(/.*SUMMARY:?|1\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
+                            if (/2\.|ACTION/i.test(c)) sections.actions = c.replace(/.*ACTION:?|2\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
+                            if (/3\.|SUGGESTION/i.test(c)) sections.suggestions = c.replace(/.*SUGGESTION:?|3\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
+                            if (/4\.|MENTORSHIP|FEEDBACK/i.test(c)) sections.mentorship = c.replace(/.*MENTORSHIP:?|FEEDBACK:?|4\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
                         });
                         setAnalysis(sections);
                         setView('analysis');
                     }
-                } catch (e) { setError(e.message); }
+                } catch (e) { 
+                    setError(`Error: ${e.message}`); 
+                }
                 setLoading(false);
             };
 
@@ -209,7 +211,6 @@
                 setError(null);
                 
                 try {
-                    // Mapped to match common template variable styles and your documented fields
                     const templateParams = {
                         "Discussion Topic": topic || "Elite Sales Call",
                         "discussion_topic": topic || "Elite Sales Call",
@@ -235,7 +236,6 @@
                         throw new Error("Service rejected transmission.");
                     }
                 } catch (e) {
-                    console.error("Email Error:", e);
                     setEmailStatus('error');
                     setError("Cloud Email Service failed. Opening device mail app as fallback...");
                     const mailtoUrl = `mailto:${CONFIG.TARGET_EMAIL}?subject=${encodeURIComponent(topic || 'Recap')}&body=${encodeURIComponent(analysis.summary)}`;
