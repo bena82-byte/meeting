@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V3.6 Final Production Master</title>
+    <title>Minutes AI | V3.7 Final Production Master</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -29,7 +29,7 @@
     <div id="root"></div>
     <div class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.6 Final...</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.7 Master...</p>
     </div>
 
     <script type="text/babel">
@@ -50,7 +50,7 @@
             You are the "Minutes AI Sales Mentor." Analyze sales transcripts to generate:
             1. EXECUTIVE SUMMARY: High-level recap & sentiment.
             2. EXPLICIT ACTION ITEMS: [Owner] - [Task] - [Due Date]. Be specific.
-            3. PROACTIVE SUGGESTIONS: 2-3 high-value follow-up items.
+            3. PROACTIVE SUGGESTIONS: 2-3 specific follow-up items.
             4. PERFORMANCE MENTORSHIP: Analysis of Discovery, Objections, and Delivery.
         `;
 
@@ -69,7 +69,7 @@
             const recognitionRef = useRef(null);
             const streamRef = useRef(null);
             const audioCtxRef = useRef(null);
-            // THE MASTER SWITCH: Prevents mic from restarting or visualizer from jumping
+            const sourceRef = useRef(null);
             const isRecordingRef = useRef(false);
 
             useEffect(() => {
@@ -77,6 +77,10 @@
                     try { emailjs.init(CONFIG.EMAILJS_KEY); } catch (e) {}
                 }
                 
+                setupRecognition();
+            }, []);
+
+            const setupRecognition = () => {
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (SpeechRecognition) {
                     const rec = new SpeechRecognition();
@@ -85,7 +89,7 @@
                     rec.lang = 'en-US';
                     
                     rec.onresult = (e) => {
-                        // REJECTION CHECK: If we aren't supposed to be recording, ignore results
+                        // REJECTION CHECK: Hard block if recording state is false
                         if (!isRecordingRef.current) return;
                         
                         let final = '';
@@ -101,14 +105,12 @@
                     rec.onend = () => {
                         // ONLY restart if the master switch is ON
                         if (isRecordingRef.current) {
-                            try { rec.start(); } catch(err) { console.error("Mic Auto-Restart Blocked"); }
-                        } else {
-                            console.log("Mic Engine: Hard Shutdown Verified.");
+                            try { rec.start(); } catch(err) {}
                         }
                     };
                     recognitionRef.current = rec;
                 }
-            }, []);
+            };
 
             const toggleRec = async () => {
                 if (isRecording) {
@@ -116,13 +118,31 @@
                     isRecordingRef.current = false;
                     setIsRecording(false);
                     
-                    if (recognitionRef.current) recognitionRef.current.stop();
-                    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-                    if (audioCtxRef.current) audioCtxRef.current.close();
+                    if (recognitionRef.current) {
+                        // Wiping listeners to prevent ghost results during shutdown
+                        recognitionRef.current.onresult = null;
+                        recognitionRef.current.onend = null;
+                        recognitionRef.current.abort(); // Immediate kill
+                    }
                     
-                    setTranscript(prev => prev + interimTranscript + ' ');
+                    if (streamRef.current) {
+                        streamRef.current.getTracks().forEach(t => t.stop());
+                    }
+                    
+                    if (sourceRef.current) {
+                        sourceRef.current.disconnect();
+                    }
+
+                    if (audioCtxRef.current) {
+                        audioCtxRef.current.close();
+                    }
+                    
+                    // Clear all temporary text immediately
                     setInterimTranscript('');
                     setVols(new Array(12).fill(0));
+                    
+                    // Re-instantiate recognition for next use
+                    setupRecognition();
                 } else {
                     // --- START SEQUENCE ---
                     setError(null);
@@ -132,14 +152,14 @@
                         
                         audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
                         const analyzer = audioCtxRef.current.createAnalyser();
-                        audioCtxRef.current.createMediaStreamSource(stream).connect(analyzer);
+                        sourceRef.current = audioCtxRef.current.createMediaStreamSource(stream);
+                        sourceRef.current.connect(analyzer);
                         const data = new Uint8Array(analyzer.frequencyBinCount);
                         
                         isRecordingRef.current = true;
                         setIsRecording(true);
 
                         const update = () => {
-                            // Check Master Switch inside animation loop
                             if (isRecordingRef.current && stream.active) {
                                 analyzer.getByteFrequencyData(data);
                                 setVols(Array.from(data.slice(0, 12)).map(v => (v / 180) * 100));
@@ -150,7 +170,9 @@
                         };
                         update();
                         
-                        if (recognitionRef.current) recognitionRef.current.start();
+                        if (recognitionRef.current) {
+                            recognitionRef.current.start();
+                        }
                     } catch (e) {
                         setError("Microphone Hardware Restricted. This usually happens in chat previews. Use your GitHub URL directly for full access.");
                     }
@@ -170,13 +192,15 @@
                 const fetchWithRetry = async (retry = 0) => {
                     const delays = [1000, 2000, 4000, 8000, 16000];
                     try {
-                        // Environment API Path - v1beta requires system_instruction in body
-                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        // Environment API Path
+                        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                        const res = await fetch(url, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
                                 contents: [{ parts: [{ text: fullText }] }],
-                                system_instruction: { parts: [{ text: SYSTEM_PROMPT }] }
+                                // FIX: Use camelCase systemInstruction for environment payload
+                                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }
                             })
                         });
                         const data = await res.json();
@@ -267,7 +291,7 @@
                                 <div className="flex justify-center items-end gap-1.5 mb-8 h-10">
                                     {vols.map((v, i) => <div key={i} className="w-2 bg-indigo-500 vol-bar shadow-sm" style={{ height: `${Math.max(15, v)}%`, opacity: 0.4 + (v/100) }} />)}
                                 </div>
-                                <button onClick={toggleRec} className={`w-36 h-36 rounded-full mx-auto flex flex-col items-center justify-center shadow-2xl transition-all active:scale-90 relative z-10 ${isRecording ? 'bg-indigo-600 ring-8 ring-indigo-50 shadow-indigo-200' : 'bg-slate-100'}`}>
+                                <button onClick={toggleRec} className={`w-36 h-36 rounded-full mx-auto flex flex-col items-center justify-center shadow-2xl transition-all active:scale-95 relative z-10 ${isRecording ? 'bg-indigo-600 ring-8 ring-indigo-50 shadow-indigo-200' : 'bg-slate-100'}`}>
                                     {isRecording ? <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="5" y="5" rx="2" ry="2"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>}
                                     <span className={`text-[10px] font-black uppercase mt-2 tracking-widest ${isRecording ? 'text-white' : 'text-slate-400'}`}>{isRecording ? "Stop" : "Record"}</span>
                                 </button>
