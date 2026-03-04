@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V3.8 Production Master</title>
+    <title>Minutes AI | V3.9 Production Master</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -29,7 +29,7 @@
     <div id="root"></div>
     <div class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.8 Production...</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.9 Final...</p>
     </div>
 
     <script type="text/babel">
@@ -51,7 +51,7 @@
             1. EXECUTIVE SUMMARY: High-level recap & sentiment.
             2. EXPLICIT ACTION ITEMS: [Owner] - [Task] - [Due Date]. Be specific.
             3. PROACTIVE SUGGESTIONS: 2-3 specific follow-up items.
-            4. PERFORMANCE MENTORSHIP: Analysis of Discovery, Objections, and Delivery.
+            4. PERFORMANCE MENTORSHIP: Analysis of Discovery, Objection Handling, and Delivery.
         `;
 
         function App() {
@@ -69,7 +69,6 @@
             const recognitionRef = useRef(null);
             const streamRef = useRef(null);
             const audioCtxRef = useRef(null);
-            const sourceRef = useRef(null);
             const isRecordingRef = useRef(false);
 
             useEffect(() => {
@@ -88,7 +87,7 @@
                     rec.lang = 'en-US';
                     
                     rec.onresult = (e) => {
-                        // REJECTION CHECK: Hard block if recording state is false to stop ghost words
+                        // REJECTION CHECK: If stop was pressed, ignore any incoming audio buffers
                         if (!isRecordingRef.current) return;
                         
                         let final = '';
@@ -105,7 +104,6 @@
                     };
 
                     rec.onend = () => {
-                        // ONLY restart if the master switch is ON
                         if (isRecordingRef.current) {
                             try { rec.start(); } catch(err) {}
                         }
@@ -116,17 +114,18 @@
 
             const toggleRec = async () => {
                 if (isRecording) {
+                    // --- PRESERVE DATA FIRST ---
+                    const finalInterim = interimTranscript;
+                    setTranscript(prev => prev + finalInterim);
+                    
                     // --- HARD STOP SEQUENCE ---
-                    // 1. Flip master switch immediately to reject incoming ghost results
                     isRecordingRef.current = false;
                     setIsRecording(false);
                     
-                    // 2. Kill speech engine
                     if (recognitionRef.current) {
-                        recognitionRef.current.abort(); // Immediate kill
+                        recognitionRef.current.stop(); 
                     }
                     
-                    // 3. Close audio hardware context to stop bouncing bars
                     if (streamRef.current) {
                         streamRef.current.getTracks().forEach(t => t.stop());
                     }
@@ -134,12 +133,10 @@
                         audioCtxRef.current.close();
                     }
                     
-                    // 4. PRESERVE TEXT: Merge interim words into main transcript so the box doesn't clear
-                    setTranscript(prev => prev + interimTranscript);
                     setInterimTranscript('');
                     setVols(new Array(12).fill(0));
                     
-                    // 5. Reset engine for next session
+                    // Re-setup engine to be fresh for next click
                     setupRecognition();
                 } else {
                     // --- START SEQUENCE ---
@@ -150,8 +147,7 @@
                         
                         audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
                         const analyzer = audioCtxRef.current.createAnalyser();
-                        sourceRef.current = audioCtxRef.current.createMediaStreamSource(stream);
-                        sourceRef.current.connect(analyzer);
+                        audioCtxRef.current.createMediaStreamSource(stream).connect(analyzer);
                         const data = new Uint8Array(analyzer.frequencyBinCount);
                         
                         isRecordingRef.current = true;
@@ -180,7 +176,7 @@
             const analyze = async () => {
                 const fullText = (transcript + interimTranscript).trim();
                 if (!fullText) {
-                    setError("No transcript captured. Record your voice or type manually to test.");
+                    setError("The transcript is empty. Please record or type text before analyzing.");
                     return;
                 }
                 
@@ -190,19 +186,17 @@
                 const fetchWithRetry = async (retry = 0) => {
                     const delays = [1000, 2000, 4000, 8000, 16000];
                     try {
-                        // Mandatory Environment Endpoint and Payload Format
                         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
                         const res = await fetch(url, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
                                 contents: [{ parts: [{ text: fullText }] }],
-                                // Environment Protocol: camelCase systemInstruction
                                 systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }
                             })
                         });
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error?.message || "AI Connection Error");
+                        if (!res.ok) throw new Error(data.error?.message || "AI Analysis Failed");
                         return data;
                     } catch (e) {
                         if (retry < 5) {
@@ -230,7 +224,7 @@
                         setView('analysis');
                     }
                 } catch (e) { 
-                    setError(`System Error: ${e.message}`); 
+                    setError(`System Alert: ${e.message}`); 
                 }
                 setLoading(false);
             };
