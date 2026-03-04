@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V4.4 Final Master</title>
+    <title>Minutes AI | V4.6 Final Master</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -22,8 +22,8 @@
         input, textarea { font-size: 16px !important; }
         .vol-bar { transition: height 0.1s ease-out; min-height: 4px; border-radius: 99px; }
         
-        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         
         .success-pulse { animation: successPulse 2s infinite; }
         @keyframes successPulse { 
@@ -37,7 +37,7 @@
     <div id="root"></div>
     <div class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Finalizing Minutes AI V4.4...</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Finalizing Minutes AI V4.6...</p>
     </div>
 
     <script type="text/babel">
@@ -57,11 +57,11 @@
 
         const SYSTEM_PROMPT = `
             # ROLE
-            You are the "Minutes AI Sales Mentor." Analyze sales transcripts to generate:
-            1. EXECUTIVE SUMMARY: High-level recap & sentiment.
+            You are the "Minutes AI Sales Mentor." Analyze the sales transcript to generate:
+            1. EXECUTIVE SUMMARY: High-level recap and sentiment analysis.
             2. EXPLICIT ACTION ITEMS: [Owner] - [Task] - [Due Date]. Be specific.
-            3. PROACTIVE SUGGESTIONS: 2-3 specific follow-up items.
-            4. PERFORMANCE MENTORSHIP: Analysis of Discovery, Objection Handling, and Delivery.
+            3. PROACTIVE SUGGESTIONS: 2-3 specific follow-up items to move the deal forward.
+            4. PERFORMANCE MENTORSHIP: Deep analysis of Discovery, Objections, and Delivery.
         `;
 
         function App() {
@@ -79,8 +79,8 @@
             const recognitionRef = useRef(null);
             const streamRef = useRef(null);
             const audioCtxRef = useRef(null);
-            const sourceRef = useRef(null);
             const isRecordingRef = useRef(false);
+            const transcriptRef = useRef(''); // Master copy to prevent data loss
 
             useEffect(() => {
                 if (CONFIG.EMAILJS_KEY) emailjs.init(CONFIG.EMAILJS_KEY);
@@ -98,16 +98,22 @@
                 rec.lang = 'en-US';
 
                 rec.onresult = (e) => {
-                    // MASTER BLOCK: If stop button was clicked, reject all incoming audio processing
+                    // NUCLEAR BLOCK: If the button says stop, ignore every single word that comes in
                     if (!isRecordingRef.current) return;
                     
                     let final = '';
                     let interim = '';
                     for (let i = e.resultIndex; i < e.results.length; ++i) {
-                        if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
-                        else interim += e.results[i][0].transcript;
+                        if (e.results[i].isFinal) {
+                            final += e.results[i][0].transcript + ' ';
+                        } else {
+                            interim += e.results[i][0].transcript;
+                        }
                     }
-                    if (final) setTranscript(prev => prev + final);
+                    if (final) {
+                        transcriptRef.current += final;
+                        setTranscript(transcriptRef.current);
+                    }
                     setInterimTranscript(interim);
                 };
 
@@ -137,19 +143,18 @@
 
             const toggleRec = async () => {
                 if (isRecording) {
-                    // --- PRESERVE DATA IMMEDIATELY ---
-                    const currentInterim = interimTranscript;
+                    // --- PRESERVE TEXT FIRST (CRITICAL FIX) ---
+                    const pendingText = interimTranscript;
+                    transcriptRef.current += pendingText;
+                    setTranscript(transcriptRef.current);
                     
                     // --- HARD STOP ---
                     shutdownEverything();
                     setIsRecording(false);
-                    
-                    // Flush the last words into the main box
-                    setTranscript(prev => (prev + currentInterim).trim() + ' ');
                     setInterimTranscript('');
                     setVols(new Array(12).fill(0));
                     
-                    setupSpeechEngine(); // Reset engine for next use
+                    setupSpeechEngine(); // Refresh for next session
                 } else {
                     // --- START ---
                     setError(null);
@@ -159,8 +164,7 @@
                         
                         audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
                         const analyzer = audioCtxRef.current.createAnalyser();
-                        sourceRef.current = audioCtxRef.current.createMediaStreamSource(stream);
-                        sourceRef.current.connect(analyzer);
+                        audioCtxRef.current.createMediaStreamSource(stream).connect(analyzer);
                         const data = new Uint8Array(analyzer.frequencyBinCount);
                         
                         isRecordingRef.current = true;
@@ -185,7 +189,7 @@
             };
 
             const handleAnalyze = async () => {
-                const fullText = (transcript + interimTranscript).trim();
+                const fullText = transcriptRef.current || transcript.trim();
                 if (!fullText) {
                     setError("Transcript is empty. Speak or type some notes first.");
                     return;
@@ -196,8 +200,11 @@
 
                 const callAI = async (retry = 0) => {
                     const delays = [1000, 2000, 4000];
+                    // Switching to standard 1.5-flash which is much more stable for public keys
+                    const model = "gemini-1.5-flash"; 
+                    
                     try {
-                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
@@ -206,7 +213,10 @@
                             })
                         });
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error?.message || "AI Error");
+                        if (!res.ok) {
+                            // Detailed error logging to fix "Unregistered Callers"
+                            throw new Error(data.error?.message || `API Error: ${res.status}`);
+                        }
                         return data;
                     } catch (e) {
                         if (retry < 2) {
@@ -233,7 +243,9 @@
                         setAnalysis(sections);
                         setView('analysis');
                     }
-                } catch (e) { setError(`AI Error: ${e.message}`); }
+                } catch (e) { 
+                    setError(`AI Error: ${e.message}. Check if your Gemini API key has 'Generative Language API' enabled.`); 
+                }
                 setIsLoading(false);
             };
 
@@ -247,7 +259,7 @@
                         action_items: analysis.actions,
                         suggestions: analysis.suggestions,
                         mentorship: analysis.mentorship,
-                        transcript: transcript + interimTranscript,
+                        transcript: transcriptRef.current,
                         email: CONFIG.TARGET_EMAIL
                     });
                     setEmailStatus('sent');
@@ -290,9 +302,14 @@
                             <div className="bg-white rounded-[2rem] border border-slate-100 flex-1 flex flex-col overflow-hidden shadow-sm min-h-[300px]">
                                 <div className="px-6 py-4 bg-slate-50 border-b flex justify-between items-center text-[10px] font-black uppercase text-slate-400 tracking-widest">
                                     <span>Live Transcript</span>
-                                    <button onClick={() => setTranscript('')} className="text-slate-300 hover:text-red-400 transition-all">Clear</button>
+                                    <button onClick={() => { transcriptRef.current = ''; setTranscript(''); }} className="text-slate-300 hover:text-red-400 transition-all">Clear</button>
                                 </div>
-                                <textarea className="w-full flex-1 p-8 text-base font-bold text-slate-700 outline-none resize-none bg-transparent" placeholder="Talk or paste notes here..." value={transcript + interimTranscript} onChange={(e) => setTranscript(e.target.value)} />
+                                <textarea 
+                                    className="w-full flex-1 p-8 text-base font-bold text-slate-700 outline-none resize-none bg-transparent" 
+                                    placeholder="Talk or paste notes here..." 
+                                    value={transcript + interimTranscript} 
+                                    onChange={(e) => { transcriptRef.current = e.target.value; setTranscript(e.target.value); }} 
+                                />
                                 <div className="p-6 bg-slate-50 border-t">
                                     <button onClick={handleAnalyze} disabled={isLoading || !(transcript + interimTranscript).trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-[11px] shadow-lg shadow-indigo-100 disabled:opacity-20 transition-all active:scale-95">
                                         {isLoading ? "Consulting AI Mentor..." : "Generate Mentor Report"}
@@ -307,7 +324,7 @@
                             </button>
                             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm"><h3 className="text-[10px] font-black text-indigo-600 uppercase mb-4 border-b-2 border-indigo-50 pb-1 inline-block italic">1. Executive Summary</h3><p className="text-base text-slate-800 font-bold italic leading-relaxed">"{analysis.summary}"</p></div>
                             <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm"><h3 className="text-[10px] font-black text-emerald-600 uppercase mb-4 border-b-2 border-emerald-50 pb-1 inline-block italic">2. Action Items</h3><div className="text-sm font-bold text-slate-700 whitespace-pre-line leading-relaxed italic">{analysis.actions}</div></div>
-                            <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl border-4 border-indigo-600/10"><h3 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2 italic">Sales Mentor Feedback</h3><p className="text-xl font-light italic leading-relaxed text-indigo-50 tracking-tight whitespace-pre-line">{analysis.mentorship}</p></div>
+                            <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl border-4 border-indigo-600/10"><h3 className="text-[10px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2 italic text-indigo-400">Sales Mentor Feedback</h3><p className="text-xl font-light italic leading-relaxed text-indigo-50 tracking-tight whitespace-pre-line">{analysis.mentorship}</p></div>
                         </div>
                     )}
                 </div>
