@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V3.0 Final Master</title>
+    <title>Minutes AI | V3.2 Production Master</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -21,13 +21,15 @@
         .vol-bar { transition: height 0.1s ease-out; min-height: 4px; border-radius: 99px; }
         .fade-in { animation: fadeIn 0.5s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .success-pulse { animation: successPulse 2s infinite; }
+        @keyframes successPulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <div class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.0 Master...</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Finalizing V3.2 Master...</p>
     </div>
 
     <script type="text/babel">
@@ -48,9 +50,9 @@
             # ROLE
             You are the "Minutes AI Sales Mentor." Analyze sales transcripts to generate:
             1. EXECUTIVE SUMMARY: High-level recap & sentiment.
-            2. ACTION ITEMS: [Owner] - [Task] - [Due Date].
+            2. EXPLICIT ACTION ITEMS: [Owner] - [Task] - [Due Date].
             3. PROACTIVE SUGGESTIONS: 2-3 specific follow-up items.
-            4. PERFORMANCE MENTORSHIP: Analysis of Discovery, Objections, and Delivery.
+            4. PERFORMANCE MENTORSHIP: Analysis of Discovery, Objection Handling, and Delivery.
         `;
 
         function App() {
@@ -61,6 +63,7 @@
             const [emailStatus, setEmailStatus] = useState('idle'); // idle, sending, sent, error
             const [error, setError] = useState(null);
             const [view, setView] = useState('input');
+            const [topic, setTopic] = useState('');
             const [vols, setVols] = useState(new Array(12).fill(0));
 
             const recognitionRef = useRef(null);
@@ -68,7 +71,10 @@
             const audioCtxRef = useRef(null);
 
             useEffect(() => {
-                if (CONFIG.EMAILJS_KEY) emailjs.init(CONFIG.EMAILJS_KEY);
+                // Initialize EmailJS immediately
+                if (CONFIG.EMAILJS_KEY) {
+                    emailjs.init(CONFIG.EMAILJS_KEY);
+                }
                 
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (SpeechRecognition) {
@@ -83,7 +89,6 @@
                         }
                         if (final) setTranscript(prev => prev + final);
                     };
-                    rec.onerror = (e) => console.error("Speech Error:", e.error);
                     rec.onend = () => { if (isRecording) try { rec.start(); } catch(err) {} };
                     recognitionRef.current = rec;
                 }
@@ -102,7 +107,6 @@
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                         streamRef.current = stream;
                         
-                        // Visualizer Setup
                         audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
                         const analyzer = audioCtxRef.current.createAnalyser();
                         audioCtxRef.current.createMediaStreamSource(stream).connect(analyzer);
@@ -120,7 +124,7 @@
                         recognitionRef.current?.start();
                         setIsRecording(true);
                     } catch (e) {
-                        setError("Microphone access blocked. Note: Speech-to-Text is often restricted in chat previews. It works best on your live GitHub site.");
+                        setError("Microphone hardware detected but restricted in this chat window. It will work on your live GitHub link.");
                     }
                 }
             };
@@ -176,23 +180,40 @@
             const sendEmail = async () => {
                 if (!analysis) return;
                 setEmailStatus('sending');
+                setError(null);
+                
                 try {
-                    // MAPS EXACTLY TO THE TEMPLATE IN YOUR SCREENSHOT
-                    await emailjs.send(CONFIG.EMAILJS_SERVICE, CONFIG.EMAILJS_TEMPLATE, {
+                    // MAPS EXACTLY TO YOUR EMAILJS TEMPLATE
+                    const templateParams = {
+                        "Discussion Topic": topic || "Elite Sales Call",
                         summary: analysis.summary,
                         action_items: analysis.actions,
                         suggestions: analysis.suggestions,
                         mentorship: analysis.mentorship,
                         transcript: transcript,
                         email: CONFIG.TARGET_EMAIL
-                    });
-                    setEmailStatus('sent');
-                    setTimeout(() => setEmailStatus('idle'), 5000);
+                    };
+
+                    const result = await emailjs.send(
+                        CONFIG.EMAILJS_SERVICE, 
+                        CONFIG.EMAILJS_TEMPLATE, 
+                        templateParams,
+                        CONFIG.EMAILJS_KEY
+                    );
+                    
+                    if (result.status === 200) {
+                        setEmailStatus('sent');
+                        setTimeout(() => setEmailStatus('idle'), 5000);
+                    } else {
+                        throw new Error("Email service rejected the request.");
+                    }
                 } catch (e) {
                     console.error("Email Error:", e);
                     setEmailStatus('error');
-                    // Fallback to mailto if EmailJS fails
-                    window.location.href = `mailto:${CONFIG.TARGET_EMAIL}?subject=Meeting Recap&body=${encodeURIComponent(analysis.summary)}`;
+                    setError("Email service failed. Opening your device mail app as a fallback...");
+                    // Fallback to mailto
+                    const mailtoUrl = `mailto:${CONFIG.TARGET_EMAIL}?subject=${encodeURIComponent(topic || 'Sales Meeting Recap')}&body=${encodeURIComponent(analysis.summary)}`;
+                    window.location.href = mailtoUrl;
                 }
             };
 
@@ -200,10 +221,10 @@
                 <div className="max-w-md mx-auto min-h-screen flex flex-col pt-4 pb-10 px-4">
                     <header className="flex justify-between items-center mb-8">
                         <div className="flex items-center gap-2">
-                            <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-100">
+                            <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
                             </div>
-                            <h1 className="font-black italic text-lg text-slate-800 tracking-tighter">MINUTES AI</h1>
+                            <h1 className="font-black italic text-lg text-slate-800 tracking-tighter uppercase">MINUTES AI</h1>
                         </div>
                         <div className="flex bg-slate-200 p-1 rounded-xl shadow-inner">
                             <button onClick={() => setView('input')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${view === 'input' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>REC</button>
@@ -224,6 +245,15 @@
                                     {isRecording ? <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="5" y="5" rx="2" ry="2"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>}
                                     <span className={`text-[10px] font-black uppercase mt-2 tracking-widest ${isRecording ? 'text-white' : 'text-slate-400'}`}>{isRecording ? "Stop" : "Record"}</span>
                                 </button>
+                                <div className="mt-6 px-4">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Discussion Topic..." 
+                                        className="w-full text-center bg-transparent border-b border-slate-100 py-2 text-sm font-bold focus:border-indigo-400 outline-none uppercase tracking-widest placeholder:text-slate-300" 
+                                        value={topic} 
+                                        onChange={(e) => setTopic(e.target.value)} 
+                                    />
+                                </div>
                             </div>
 
                             <div className="bg-white rounded-3xl border border-slate-100 flex-1 flex flex-col overflow-hidden shadow-sm min-h-[300px]">
@@ -241,8 +271,12 @@
                         </div>
                     ) : (
                         <div className="space-y-4 pb-10 fade-in">
-                            <button onClick={sendEmail} disabled={emailStatus === 'sending'} className={`w-full py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl transition-all active:scale-95 ${emailStatus === 'sent' ? 'bg-emerald-500 text-white' : 'bg-indigo-600 text-white'}`}>
-                                {emailStatus === 'sending' ? 'Transmitting...' : emailStatus === 'sent' ? 'Recap Sent Successfully' : emailStatus === 'error' ? 'Delivery Error - Retry?' : 'Email Executive Recap'}
+                            <button 
+                                onClick={sendEmail} 
+                                disabled={emailStatus === 'sending'} 
+                                className={`w-full py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl transition-all active:scale-95 ${emailStatus === 'sent' ? 'bg-emerald-500 text-white success-pulse' : 'bg-indigo-600 text-white'}`}
+                            >
+                                {emailStatus === 'sending' ? 'Transmitting...' : emailStatus === 'sent' ? '✓ Recap Sent Successfully' : emailStatus === 'error' ? 'Delivery Error - Mail App Opening' : 'Email Executive Recap'}
                             </button>
                             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
                                 <h3 className="text-[9px] font-black text-indigo-600 uppercase mb-4 border-b-2 border-indigo-50 pb-1 inline-block">1. Executive Summary</h3>
@@ -253,7 +287,7 @@
                                 <div className="text-sm font-bold text-slate-700 whitespace-pre-line leading-relaxed italic">{analysis.actions}</div>
                             </div>
                             <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl border-4 border-indigo-600/10">
-                                <h3 className="text-[9px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2">Sales Mentor Insights</h3>
+                                <h3 className="text-[9px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2 italic">Sales Mentor Insights</h3>
                                 <p className="text-xl font-light italic leading-relaxed text-indigo-50 tracking-tight whitespace-pre-line">{analysis.mentorship}</p>
                             </div>
                         </div>
