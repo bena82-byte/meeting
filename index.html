@@ -48,9 +48,8 @@
 
         // ---------------------------------------------------------
         // PRODUCTION CONFIGURATION
-        // Using your healthy API key. Since your GitHub is private, 
-        // a simple string is safe and prevents processing errors.
-        const apiKey = "AIzaSyAgTvAKRGBZGni87Jy4dQNpKnqgkX7p3jg";
+        // The execution environment provides the key securely at runtime.
+        const apiKey = "";
         
         const CONFIG = {
             EMAILJS_SERVICE: "service_u54bof7",
@@ -200,28 +199,38 @@
                 setIsLoading(true); 
                 setError(null);
                 
-                try {
-                    // THE ROOT CAUSE FIX:
-                    // Utilizing the precise model string required to prevent "Model Not Found" and payload errors.
+                const callAI = async (retry = 0) => {
+                    // Exponential backoff to ensure connection stability
+                    const delays = [1000, 2000, 4000, 8000, 16000];
                     const model = "gemini-2.5-flash-preview-09-2025";
                     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
                     
-                    const res = await fetch(url, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: text }] }],
-                            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }
-                        })
-                    });
-                    
-                    const data = await res.json();
-                    
-                    if (!res.ok) {
-                        const msg = data.error?.message || "AI Analysis Failed";
-                        throw new Error(`AI System Error: ${msg}`);
+                    try {
+                        const res = await fetch(url, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: text }] }],
+                                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }
+                            })
+                        });
+                        
+                        const data = await res.json();
+                        if (!res.ok) {
+                            throw new Error(data.error?.message || "AI Analysis Failed");
+                        }
+                        return data;
+                    } catch (e) {
+                        if (retry < delays.length) {
+                            await new Promise(r => setTimeout(r, delays[retry]));
+                            return callAI(retry + 1);
+                        }
+                        throw e;
                     }
-                    
+                };
+                
+                try {
+                    const data = await callAI();
                     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     
                     if (aiText) {
@@ -240,7 +249,7 @@
                         throw new Error("AI returned an empty or invalid response.");
                     }
                 } catch (e) { 
-                    setError(e.message); 
+                    setError("AI Connection Error. Please try again."); 
                 }
                 setIsLoading(false);
             };
