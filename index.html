@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V3.4 Production Master</title>
+    <title>Minutes AI | V3.6 Final Production Master</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -25,18 +25,17 @@
         @keyframes successPulse { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
     </style>
 </head>
-<body>
+<body class="text-slate-900 antialiased">
     <div id="root"></div>
     <div class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.4 Production...</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 10px; letter-spacing: 0.1em;">Loading V3.6 Final...</p>
     </div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef, useCallback } = React;
 
         // ENVIRONMENT CONFIG
-        // The execution environment provides the key at runtime.
         const apiKey = ""; 
 
         const CONFIG = {
@@ -51,8 +50,8 @@
             You are the "Minutes AI Sales Mentor." Analyze sales transcripts to generate:
             1. EXECUTIVE SUMMARY: High-level recap & sentiment.
             2. EXPLICIT ACTION ITEMS: [Owner] - [Task] - [Due Date]. Be specific.
-            3. PROACTIVE SUGGESTIONS: 2-3 specific follow-up items.
-            4. PERFORMANCE MENTORSHIP: Analysis of Discovery, Objection Handling, and Delivery.
+            3. PROACTIVE SUGGESTIONS: 2-3 high-value follow-up items.
+            4. PERFORMANCE MENTORSHIP: Analysis of Discovery, Objections, and Delivery.
         `;
 
         function App() {
@@ -70,19 +69,14 @@
             const recognitionRef = useRef(null);
             const streamRef = useRef(null);
             const audioCtxRef = useRef(null);
+            // THE MASTER SWITCH: Prevents mic from restarting or visualizer from jumping
+            const isRecordingRef = useRef(false);
 
-            // INITIALIZE EMAILJS ONCE ON MOUNT
             useEffect(() => {
                 if (CONFIG.EMAILJS_KEY) {
-                    try {
-                        emailjs.init(CONFIG.EMAILJS_KEY);
-                    } catch (e) {
-                        console.error("EmailJS Init Failed", e);
-                    }
+                    try { emailjs.init(CONFIG.EMAILJS_KEY); } catch (e) {}
                 }
-            }, []);
-
-            useEffect(() => {
+                
                 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
                 if (SpeechRecognition) {
                     const rec = new SpeechRecognition();
@@ -91,38 +85,46 @@
                     rec.lang = 'en-US';
                     
                     rec.onresult = (e) => {
+                        // REJECTION CHECK: If we aren't supposed to be recording, ignore results
+                        if (!isRecordingRef.current) return;
+                        
                         let final = '';
                         let interim = '';
                         for (let i = e.resultIndex; i < e.results.length; ++i) {
-                            if (e.results[i].isFinal) {
-                                final += e.results[i][0].transcript + ' ';
-                            } else {
-                                interim += e.results[i][0].transcript;
-                            }
+                            if (e.results[i].isFinal) final += e.results[i][0].transcript + ' ';
+                            else interim += e.results[i][0].transcript;
                         }
                         if (final) setTranscript(prev => prev + final);
                         setInterimTranscript(interim);
                     };
 
                     rec.onend = () => {
-                        if (isRecording) {
-                            try { rec.start(); } catch(err) {}
+                        // ONLY restart if the master switch is ON
+                        if (isRecordingRef.current) {
+                            try { rec.start(); } catch(err) { console.error("Mic Auto-Restart Blocked"); }
+                        } else {
+                            console.log("Mic Engine: Hard Shutdown Verified.");
                         }
                     };
                     recognitionRef.current = rec;
                 }
-            }, [isRecording]);
+            }, []);
 
             const toggleRec = async () => {
                 if (isRecording) {
-                    recognitionRef.current?.stop();
-                    streamRef.current?.getTracks().forEach(t => t.stop());
-                    if (audioCtxRef.current) audioCtxRef.current.close();
+                    // --- HARD STOP SEQUENCE ---
+                    isRecordingRef.current = false;
                     setIsRecording(false);
+                    
+                    if (recognitionRef.current) recognitionRef.current.stop();
+                    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+                    if (audioCtxRef.current) audioCtxRef.current.close();
+                    
                     setTranscript(prev => prev + interimTranscript + ' ');
                     setInterimTranscript('');
                     setVols(new Array(12).fill(0));
                 } else {
+                    // --- START SEQUENCE ---
                     setError(null);
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -133,26 +135,34 @@
                         audioCtxRef.current.createMediaStreamSource(stream).connect(analyzer);
                         const data = new Uint8Array(analyzer.frequencyBinCount);
                         
+                        isRecordingRef.current = true;
+                        setIsRecording(true);
+
                         const update = () => {
-                            if (stream.active) {
+                            // Check Master Switch inside animation loop
+                            if (isRecordingRef.current && stream.active) {
                                 analyzer.getByteFrequencyData(data);
                                 setVols(Array.from(data.slice(0, 12)).map(v => (v / 180) * 100));
                                 requestAnimationFrame(update);
+                            } else {
+                                setVols(new Array(12).fill(0));
                             }
                         };
                         update();
                         
-                        recognitionRef.current?.start();
-                        setIsRecording(true);
+                        if (recognitionRef.current) recognitionRef.current.start();
                     } catch (e) {
-                        setError("Microphone access blocked. Use the direct GitHub link to bypass chat restrictions.");
+                        setError("Microphone Hardware Restricted. This usually happens in chat previews. Use your GitHub URL directly for full access.");
                     }
                 }
             };
 
             const analyze = async () => {
                 const fullText = (transcript + interimTranscript).trim();
-                if (!fullText) return;
+                if (!fullText) {
+                    setError("No transcript captured. Record your voice or type manually to test.");
+                    return;
+                }
                 
                 setLoading(true);
                 setError(null);
@@ -160,18 +170,17 @@
                 const fetchWithRetry = async (retry = 0) => {
                     const delays = [1000, 2000, 4000, 8000, 16000];
                     try {
-                        // Environment-specific URL and Payload formatting
+                        // Environment API Path - v1beta requires system_instruction in body
                         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
                                 contents: [{ parts: [{ text: fullText }] }],
-                                // Environment requires systemInstruction (camelCase)
-                                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }
+                                system_instruction: { parts: [{ text: SYSTEM_PROMPT }] }
                             })
                         });
                         const data = await res.json();
-                        if (!res.ok) throw new Error(data.error?.message || "AI Error");
+                        if (!res.ok) throw new Error(data.error?.message || "AI Connection Error");
                         return data;
                     } catch (e) {
                         if (retry < 4) {
@@ -187,8 +196,7 @@
                     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     if (aiText) {
                         const sections = { summary: "", actions: "", suggestions: "", mentorship: "" };
-                        // Improved regex to handle markdown formatting often used by AI
-                        const parts = aiText.split(/(?=1\.|2\.|3\.|4\.|SUMMARY|ACTION|SUGGESTION|MENTORSHIP|FEEDBACK|\*\*SUMMARY|\*\*ACTION)/i);
+                        const parts = aiText.split(/(?=1\.|2\.|3\.|4\.|SUMMARY|ACTION|SUGGESTION|MENTORSHIP|FEEDBACK)/i);
                         parts.forEach(p => {
                             const c = p.trim();
                             if (/1\.|SUMMARY/i.test(c)) sections.summary = c.replace(/.*SUMMARY:?|1\./i, '').trim().replace(/^[\*\#\-\s]*/, '');
@@ -200,7 +208,7 @@
                         setView('analysis');
                     }
                 } catch (e) { 
-                    setError(`Error: ${e.message}`); 
+                    setError(`System Error: ${e.message}`); 
                 }
                 setLoading(false);
             };
@@ -212,8 +220,7 @@
                 
                 try {
                     const templateParams = {
-                        "Discussion Topic": topic || "Elite Sales Call",
-                        "discussion_topic": topic || "Elite Sales Call",
+                        "Discussion Topic": topic || "Executive Recap",
                         summary: analysis.summary,
                         action_items: analysis.actions,
                         suggestions: analysis.suggestions,
@@ -222,22 +229,15 @@
                         email: CONFIG.TARGET_EMAIL
                     };
 
-                    const result = await emailjs.send(
-                        CONFIG.EMAILJS_SERVICE, 
-                        CONFIG.EMAILJS_TEMPLATE, 
-                        templateParams,
-                        CONFIG.EMAILJS_KEY
-                    );
+                    const result = await emailjs.send(CONFIG.EMAILJS_SERVICE, CONFIG.EMAILJS_TEMPLATE, templateParams, CONFIG.EMAILJS_KEY);
                     
                     if (result.status === 200) {
                         setEmailStatus('sent');
                         setTimeout(() => setEmailStatus('idle'), 5000);
-                    } else {
-                        throw new Error("Service rejected transmission.");
-                    }
+                    } else { throw new Error("Email provider rejected"); }
                 } catch (e) {
                     setEmailStatus('error');
-                    setError("Cloud Email Service failed. Opening device mail app as fallback...");
+                    setError("Email service failed. Opening your device mail app...");
                     const mailtoUrl = `mailto:${CONFIG.TARGET_EMAIL}?subject=${encodeURIComponent(topic || 'Recap')}&body=${encodeURIComponent(analysis.summary)}`;
                     window.location.href = mailtoUrl;
                 }
@@ -253,8 +253,8 @@
                             <h1 className="font-black italic text-lg text-slate-800 tracking-tighter uppercase leading-none">MINUTES AI</h1>
                         </div>
                         <div className="flex bg-slate-200 p-1 rounded-xl shadow-inner">
-                            <button onClick={() => setView('input')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${view === 'input' ? 'bg-white shadow text-indigo-600' : 'text-slate-50'}`}>REC</button>
-                            <button onClick={() => analysis && setView('analysis')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${!analysis ? 'opacity-30' : ''} ${view === 'analysis' ? 'bg-white shadow text-indigo-600' : 'text-slate-50'}`}>REPORT</button>
+                            <button onClick={() => setView('input')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${view === 'input' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>REC</button>
+                            <button onClick={() => analysis && setView('analysis')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${!analysis ? 'opacity-30' : ''} ${view === 'analysis' ? 'bg-white shadow text-indigo-600' : 'text-slate-500'}`}>REPORT</button>
                         </div>
                     </header>
 
@@ -267,11 +267,11 @@
                                 <div className="flex justify-center items-end gap-1.5 mb-8 h-10">
                                     {vols.map((v, i) => <div key={i} className="w-2 bg-indigo-500 vol-bar shadow-sm" style={{ height: `${Math.max(15, v)}%`, opacity: 0.4 + (v/100) }} />)}
                                 </div>
-                                <button onClick={toggleRec} className={`w-36 h-36 rounded-full mx-auto flex flex-col items-center justify-center shadow-2xl transition-all active:scale-90 relative z-10 ${isRecording ? 'bg-indigo-600 ring-8 ring-indigo-50' : 'bg-slate-100'}`}>
+                                <button onClick={toggleRec} className={`w-36 h-36 rounded-full mx-auto flex flex-col items-center justify-center shadow-2xl transition-all active:scale-90 relative z-10 ${isRecording ? 'bg-indigo-600 ring-8 ring-indigo-50 shadow-indigo-200' : 'bg-slate-100'}`}>
                                     {isRecording ? <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="5" y="5" rx="2" ry="2"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>}
                                     <span className={`text-[10px] font-black uppercase mt-2 tracking-widest ${isRecording ? 'text-white' : 'text-slate-400'}`}>{isRecording ? "Stop" : "Record"}</span>
                                 </button>
-                                <div className="mt-6 px-4">
+                                <div className="mt-6">
                                     <input 
                                         type="text" 
                                         placeholder="Discussion Topic..." 
@@ -290,7 +290,7 @@
                                 <textarea className="w-full flex-1 p-6 text-base font-bold text-slate-700 outline-none resize-none bg-transparent" placeholder="Words will appear here as you speak..." value={transcript + interimTranscript} onChange={(e) => setTranscript(e.target.value)} />
                                 <div className="p-4 bg-slate-50 border-t">
                                     <button onClick={analyze} disabled={loading || !(transcript + interimTranscript).trim()} className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl uppercase tracking-widest text-[10px] shadow-lg shadow-indigo-100 disabled:opacity-20 transition-all">
-                                        {loading ? <div className="flex items-center justify-center gap-2"><div className="spinner"></div>Analysing...</div> : "Generate Mentor Report"}
+                                        {loading ? <div className="flex items-center justify-center gap-2"><div className="spinner"></div>Consulting AI Mentor...</div> : "Generate Mentor Report"}
                                     </button>
                                 </div>
                             </div>
@@ -305,15 +305,15 @@
                                 {emailStatus === 'sending' ? 'Transmitting...' : emailStatus === 'sent' ? '✓ Recap Sent Successfully' : emailStatus === 'error' ? 'Delivery Error - Mail App Opening' : 'Email Executive Recap'}
                             </button>
                             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                                <h3 className="text-[9px] font-black text-indigo-600 uppercase mb-4 border-b-2 border-indigo-50 pb-1 inline-block">1. Executive Summary</h3>
+                                <h3 className="text-[9px] font-black text-indigo-600 uppercase mb-4 border-b-2 border-indigo-50 pb-1 inline-block italic">1. Executive Summary</h3>
                                 <p className="text-base text-slate-800 font-bold italic leading-relaxed">"{analysis.summary}"</p>
                             </div>
                             <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-                                <h3 className="text-[9px] font-black text-emerald-600 uppercase mb-4 border-b-2 border-emerald-50 pb-1 inline-block">2. Action Items</h3>
+                                <h3 className="text-[9px] font-black text-emerald-600 uppercase mb-4 border-b-2 border-emerald-50 pb-1 inline-block italic">2. Action Items</h3>
                                 <div className="text-sm font-bold text-slate-700 whitespace-pre-line leading-relaxed italic">{analysis.actions}</div>
                             </div>
                             <div className="bg-slate-900 p-10 rounded-[3rem] text-white shadow-2xl border-4 border-indigo-600/10">
-                                <h3 className="text-[9px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2 italic">Sales Mentor Insights</h3>
+                                <h3 className="text-[9px] font-black text-indigo-400 uppercase mb-6 tracking-widest border-b border-white/10 pb-2 italic">Sales Mentor Feedback</h3>
                                 <p className="text-xl font-light italic leading-relaxed text-indigo-50 tracking-tight whitespace-pre-line">{analysis.mentorship}</p>
                             </div>
                         </div>
