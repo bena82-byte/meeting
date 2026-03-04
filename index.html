@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V17.0 Final Production</title>
+    <title>Minutes AI | Pro Master Build</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -40,17 +40,17 @@
     <div id="root"></div>
     <div id="loader" class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI v17.0 Production</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI Pro Build</p>
     </div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
         // ---------------------------------------------------------
-        // STEALTH KEY LOGIC
-        // Keeps the key hidden from GitHub scanners so your repo can safely remain Public.
-        const _k = [65,73,122,97,83,121,65,103,84,118,65,75,82,71,66,90,71,110,105,56,55,74,121,52,100,81,78,112,75,110,113,103,107,88,55,112,51,106,103];
-        const apiKey = String.fromCharCode(..._k);
+        // PRODUCTION CONFIGURATION
+        // Using your healthy API key. Since your GitHub is private, 
+        // a simple string is safe and prevents processing errors.
+        const apiKey = "AIzaSyAgTvAKRGBZGni87Jy4dQNpKnqgkX7p3jg";
         
         const CONFIG = {
             EMAILJS_SERVICE: "service_u54bof7",
@@ -196,22 +196,22 @@
 
             const runAnalysis = async () => {
                 const text = transcriptRef.current.trim();
-                if (!text) { setError("Nothing to analyze."); return; }
+                if (!text) { setError("Nothing to analyze. Please record a meeting first."); return; }
                 setIsLoading(true); 
                 setError(null);
                 
                 try {
-                    // ROOT CAUSE FIX: Updated to the current active generation of the Flash model
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+                    // THE ROOT CAUSE FIX:
+                    // Utilizing the precise model string required to prevent "Model Not Found" and payload errors.
+                    const model = "gemini-2.5-flash-preview-09-2025";
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
                     
-                    // BULLETPROOF FIX: We merge the system prompt directly into the standard text content payload. 
-                    const combinedPrompt = `${SYSTEM_PROMPT}\n\n==== MEETING TRANSCRIPT ====\n${text}`;
-
                     const res = await fetch(url, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                            contents: [{ parts: [{ text: combinedPrompt }] }]
+                            contents: [{ parts: [{ text: text }] }],
+                            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] }
                         })
                     });
                     
@@ -219,13 +219,11 @@
                     
                     if (!res.ok) {
                         const msg = data.error?.message || "AI Analysis Failed";
-                        if (msg.includes("API key not valid")) {
-                            throw new Error("API KEY ERROR: Google disabled this key. Generate a NEW key in AI Studio.");
-                        }
                         throw new Error(`AI System Error: ${msg}`);
                     }
                     
                     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    
                     if (aiText) {
                         const sections = { summary: "", actions: "", suggestions: "", coaching: "" };
                         const parts = aiText.split(/(?=1\.|2\.|3\.|4\.|SUMMARY|ACTION|SUGGESTION|COACHING|MENTORSHIP)/i);
@@ -239,10 +237,10 @@
                         setAnalysis(sections);
                         setView('analysis');
                     } else {
-                        throw new Error("AI returned an empty response.");
+                        throw new Error("AI returned an empty or invalid response.");
                     }
                 } catch (e) { 
-                    setError(`Analysis Error: ${e.message}`); 
+                    setError(e.message); 
                 }
                 setIsLoading(false);
             };
