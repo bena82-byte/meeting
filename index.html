@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minutes AI | V16.0 Production Master</title>
+    <title>Minutes AI | V17.0 Final Production</title>
     <!-- Core Libraries -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -40,7 +40,7 @@
     <div id="root"></div>
     <div id="loader" class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI v16.0 Production</p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI v17.0 Production</p>
     </div>
 
     <script type="text/babel">
@@ -201,11 +201,10 @@
                 setError(null);
                 
                 try {
-                    // Using standard stable endpoint
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+                    // ROOT CAUSE FIX: Updated to the current active generation of the Flash model
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
                     
                     // BULLETPROOF FIX: We merge the system prompt directly into the standard text content payload. 
-                    // This bypasses the strict schema requirements of the 'systemInstruction' field which caused the JSON error.
                     const combinedPrompt = `${SYSTEM_PROMPT}\n\n==== MEETING TRANSCRIPT ====\n${text}`;
 
                     const res = await fetch(url, {
