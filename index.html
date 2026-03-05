@@ -194,13 +194,12 @@
                 setIsLoading(true); 
                 setError(null);
                 
-                const callAI = async (retry = 0) => {
+                const callAI = async (retry = 0, currentModel = "gemini-2.5-flash-preview-09-2025") => {
                     const delays = [1000, 2000, 4000]; 
                     const activeKey = apiKey || fallbackKey;
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeKey}`;
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${activeKey}`;
                     
                     try {
-                        // Clean, fail-proof prompt. Does not use strict API schemas to prevent Google from rejecting the structure.
                         const prompt = `You are an Elite Sales Performance Mentor. Analyze the meeting transcript.
 Return ONLY a valid JSON object with EXACTLY these four keys (all lowercase strings):
 - "summary": Professional executive summary and client sentiment.
@@ -227,6 +226,20 @@ ${text}`;
                             let errMsg = `HTTP ${res.status}`;
                             try { errMsg = JSON.parse(errText).error.message; } catch(e) {}
                             
+                            // ----------------------------------------------------------------------
+                            // THE HOT-SWAP ROUTER FIX:
+                            // If you run this on GitHub Pages, the public Google API will report 
+                            // that the internal Canvas model (gemini-2.5-preview) is "Not Found". 
+                            // When this happens, we catch the 404 error and instantly retry using 
+                            // the standard public model (gemini-1.5-flash) which will succeed.
+                            // ----------------------------------------------------------------------
+                            if (res.status === 404 && errMsg.toLowerCase().includes("is not found")) {
+                                if (currentModel === "gemini-2.5-flash-preview-09-2025") {
+                                    console.log("Canvas Preview model not found on public deployment. Hot-swapping to gemini-1.5-flash...");
+                                    return callAI(retry, "gemini-1.5-flash");
+                                }
+                            }
+                            
                             const errorObj = new Error(errMsg);
                             errorObj.status = res.status;
                             throw errorObj;
@@ -234,12 +247,11 @@ ${text}`;
                         
                         return await res.json();
                     } catch (e) {
-                        // FAIL FAST FIX: If the error is 400 (Bad Request) or a Network Error (CORS), 
-                        // it will instantly throw the error and stop spinning. It ONLY retries on Server Overloads (5xx).
+                        // Fail fast. Only retry on Server Overloads (5xx) or Rate Limits (429).
                         if (e.status === 429 || (e.status >= 500 && e.status < 600)) {
                             if (retry < delays.length) {
                                 await new Promise(r => setTimeout(r, delays[retry]));
-                                return callAI(retry + 1);
+                                return callAI(retry + 1, currentModel);
                             }
                         }
                         throw e;
