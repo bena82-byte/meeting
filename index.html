@@ -42,14 +42,14 @@
     <div id="root"></div>
     <div id="loader" class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI Pro Build <span style="color:#94a3b8; margin-left:4px;">v1.1</span></p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI Pro Build <span style="color:#94a3b8; margin-left:4px;">v1.3</span></p>
     </div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
         // ---------------------------------------------------------
-        // PRODUCTION CONFIGURATION (v1.1)
+        // PRODUCTION CONFIGURATION (v1.3)
         const apiKey = ""; // The execution environment provides the key at runtime for this Canvas
         
         // Stealth Fallback Key: Your new healthy key obfuscated to bypass GitHub scanners.
@@ -62,7 +62,7 @@
             EMAILJS_TEMPLATE: "template_azspfba",
             EMAILJS_KEY: "FjAY013_HlrpGCEZT",
             TARGET_EMAIL: "ben.alexander@aplaceformom.com",
-            VERSION: "v1.1"
+            VERSION: "v1.3"
         };
         // ---------------------------------------------------------
 
@@ -82,6 +82,7 @@
             const recognitionRef = useRef(null);
             const isRecordingRef = useRef(false);
             const transcriptRef = useRef('');
+            const currentRunFinalRef = useRef(''); // Holds the finalized text of the *current* engine session to prevent Android duplication
 
             useEffect(() => {
                 const loader = document.getElementById('loader');
@@ -115,16 +116,25 @@
 
                 rec.onresult = (e) => {
                     if (!isRecordingRef.current) return;
-                    let f = ''; let i = '';
-                    for (let x = e.resultIndex; x < e.results.length; ++x) {
-                        if (e.results[x].isFinal) f += e.results[x][0].transcript + ' ';
-                        else i += e.results[x][0].transcript;
+                    
+                    let finalStr = ''; 
+                    let interimStr = '';
+                    
+                    // ANDROID BUG FIX: Completely rebuild the string from the start of the results array (0).
+                    // This bypasses the Android duplication bug where resultIndex stays 0 and sends full history repeatedly.
+                    for (let i = 0; i < e.results.length; ++i) {
+                        if (e.results[i].isFinal) {
+                            finalStr += e.results[i][0].transcript + ' ';
+                        } else {
+                            interimStr += e.results[i][0].transcript;
+                        }
                     }
-                    if (f) {
-                        transcriptRef.current += f;
-                        setTranscript(transcriptRef.current);
-                    }
-                    setInterimTranscript(i);
+                    
+                    // Do not permanently lock finalStr into the main transcript yet.
+                    // Just store it for this run, and display the composite on the screen.
+                    currentRunFinalRef.current = finalStr;
+                    setTranscript(transcriptRef.current + finalStr);
+                    setInterimTranscript(interimStr);
                 };
 
                 rec.onerror = (e) => {
@@ -139,6 +149,11 @@
 
                 rec.onend = () => {
                     if (isRecordingRef.current) {
+                        // The engine paused/restarted. Safely lock in the previous run's text permanently.
+                        transcriptRef.current += currentRunFinalRef.current;
+                        currentRunFinalRef.current = '';
+                        setTranscript(transcriptRef.current);
+                        
                         try { rec.start(); } catch(err) {}
                     }
                 };
@@ -157,6 +172,10 @@
 
             const toggleRec = () => {
                 if (isRecording) {
+                    // Lock in whatever text is currently sitting in the temp refs before stopping
+                    transcriptRef.current += currentRunFinalRef.current;
+                    currentRunFinalRef.current = '';
+                    
                     const finalSnap = (transcriptRef.current + interimTranscript).trim() + " ";
                     transcriptRef.current = finalSnap;
                     setTranscript(finalSnap);
@@ -200,6 +219,13 @@
                         isRecordingRef.current = false;
                     }
                 }
+            };
+
+            const clearTranscript = () => {
+                transcriptRef.current = ''; 
+                currentRunFinalRef.current = ''; 
+                setTranscript(''); 
+                setInterimTranscript('');
             };
 
             const runAnalysis = async () => {
@@ -367,7 +393,7 @@ ${text}`;
                             <div className="bg-white rounded-[2.5rem] border border-slate-100 flex-1 flex flex-col overflow-hidden shadow-sm min-h-[350px]">
                                 <div className="px-7 py-4 bg-slate-50 border-b flex justify-between items-center text-[10px] font-black uppercase text-slate-400 tracking-widest">
                                     <span>Live Transcript</span>
-                                    <button onClick={() => { transcriptRef.current = ''; setTranscript(''); }} className="text-slate-300">Clear</button>
+                                    <button onClick={clearTranscript} className="text-slate-300">Clear</button>
                                 </div>
                                 <textarea className="w-full flex-1 p-8 text-base font-medium text-slate-700 outline-none resize-none bg-transparent custom-scroll leading-relaxed" placeholder="Transcript will lock here once you press Stop..." value={transcript + interimTranscript} onChange={(e) => { transcriptRef.current = e.target.value; setTranscript(e.target.value); }} />
                                 <div className="p-6 bg-slate-50 border-t">
