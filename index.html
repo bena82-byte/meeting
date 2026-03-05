@@ -42,14 +42,14 @@
     <div id="root"></div>
     <div id="loader" class="loading-screen">
         <div class="spinner"></div>
-        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI Pro Build <span style="color:#94a3b8; margin-left:4px;">v1.3</span></p>
+        <p style="margin-top: 15px; font-weight: 800; color: #6366f1; text-transform: uppercase; font-size: 11px; letter-spacing: 0.1em;">Minutes AI Pro Build <span style="color:#94a3b8; margin-left:4px;">v1.4</span></p>
     </div>
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
         // ---------------------------------------------------------
-        // PRODUCTION CONFIGURATION (v1.3)
+        // PRODUCTION CONFIGURATION (v1.4)
         const apiKey = ""; // The execution environment provides the key at runtime for this Canvas
         
         // Stealth Fallback Key: Your new healthy key obfuscated to bypass GitHub scanners.
@@ -62,7 +62,7 @@
             EMAILJS_TEMPLATE: "template_azspfba",
             EMAILJS_KEY: "FjAY013_HlrpGCEZT",
             TARGET_EMAIL: "ben.alexander@aplaceformom.com",
-            VERSION: "v1.3"
+            VERSION: "v1.4"
         };
         // ---------------------------------------------------------
 
@@ -120,13 +120,38 @@
                     let finalStr = ''; 
                     let interimStr = '';
                     
-                    // ANDROID BUG FIX: Completely rebuild the string from the start of the results array (0).
-                    // This bypasses the Android duplication bug where resultIndex stays 0 and sends full history repeatedly.
+                    // SMART DEDUPLICATOR FIX (v1.4)
+                    // Android sends the entire history in a loop. We intercept the loop, 
+                    // check if the new text contains the old text, and safely overwrite it 
+                    // instead of endlessly duplicating it.
                     for (let i = 0; i < e.results.length; ++i) {
+                        let chunk = e.results[i][0].transcript.trim();
+                        if (!chunk) continue;
+                        
                         if (e.results[i].isFinal) {
-                            finalStr += e.results[i][0].transcript + ' ';
+                            let cleanFinal = finalStr.trim().toLowerCase();
+                            let cleanChunk = chunk.toLowerCase();
+                            
+                            // If the new chunk starts with our entire string, overwrite it (Android bug)
+                            if (cleanFinal && cleanChunk.startsWith(cleanFinal)) {
+                                finalStr = chunk + ' ';
+                            } else if (cleanFinal === cleanChunk) {
+                                // Exact duplicate, do nothing
+                            } else {
+                                // Standard continuous speech, append it
+                                finalStr += chunk + ' ';
+                            }
                         } else {
-                            interimStr += e.results[i][0].transcript;
+                            let cleanInterim = interimStr.trim().toLowerCase();
+                            let cleanChunk = chunk.toLowerCase();
+                            
+                            if (cleanInterim && cleanChunk.startsWith(cleanInterim)) {
+                                interimStr = chunk + ' ';
+                            } else if (cleanInterim === cleanChunk) {
+                                // Exact duplicate, do nothing
+                            } else {
+                                interimStr += chunk + ' ';
+                            }
                         }
                     }
                     
@@ -194,10 +219,7 @@
                     try {
                         recognitionRef.current?.start();
                         
-                        // FAKE VISUALIZER FIX: 
-                        // Instead of locking the microphone hardware with AudioContext (which breaks Android Chrome),
-                        // we use a sleek mathematical simulation while the recording flag is true.
-                        // This guarantees the Speech Engine gets 100% priority access to the mic on all devices.
+                        // Sleek mathematical simulation visualizer
                         let phase = 0;
                         const draw = () => {
                             if (isRecordingRef.current) {
@@ -245,9 +267,6 @@
                     const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${activeKey}`;
                     
                     try {
-                        // BULLETPROOF PROMPT FIX: 
-                        // Removed all strict API structural schemas that trigger 400 Bad Request errors on older servers.
-                        // Merged all instructions into one simple text payload asking for standard JSON.
                         const prompt = `You are an Elite Sales Performance Mentor. Analyze the meeting transcript to produce high-impact recap reports.
                         
 Please return ONLY a valid JSON object with EXACTLY these four keys (all lowercase strings) and no markdown formatting:
