@@ -193,10 +193,16 @@
                 if (!text) { setError("Nothing to analyze. Please record a meeting first."); return; }
                 setIsLoading(true); 
                 setError(null);
-                
-                const callAI = async (retry = 0, currentModel = "gemini-2.5-flash-preview-09-2025") => {
+
+                const callAI = async (retry = 0) => {
                     const delays = [1000, 2000, 4000]; 
                     const activeKey = apiKey || fallbackKey;
+                    
+                    // ENVIRONMENT-BASED ROUTING FIX: 
+                    // If 'apiKey' exists, we are running inside the Canvas tester, so use the internal preview model.
+                    // If 'apiKey' is empty, we are on GitHub Pages, so use the robust public 1.5-flash model.
+                    // This perfectly eliminates the 404 "not found" error.
+                    const currentModel = apiKey ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
                     const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${activeKey}`;
                     
                     try {
@@ -226,20 +232,6 @@ ${text}`;
                             let errMsg = `HTTP ${res.status}`;
                             try { errMsg = JSON.parse(errText).error.message; } catch(e) {}
                             
-                            // ----------------------------------------------------------------------
-                            // THE HOT-SWAP ROUTER FIX:
-                            // If you run this on GitHub Pages, the public Google API will report 
-                            // that the internal Canvas model (gemini-2.5-preview) is "Not Found". 
-                            // When this happens, we catch the 404 error and instantly retry using 
-                            // the standard public model (gemini-1.5-flash) which will succeed.
-                            // ----------------------------------------------------------------------
-                            if (res.status === 404 && errMsg.toLowerCase().includes("is not found")) {
-                                if (currentModel === "gemini-2.5-flash-preview-09-2025") {
-                                    console.log("Canvas Preview model not found on public deployment. Hot-swapping to gemini-1.5-flash...");
-                                    return callAI(retry, "gemini-1.5-flash");
-                                }
-                            }
-                            
                             const errorObj = new Error(errMsg);
                             errorObj.status = res.status;
                             throw errorObj;
@@ -251,7 +243,7 @@ ${text}`;
                         if (e.status === 429 || (e.status >= 500 && e.status < 600)) {
                             if (retry < delays.length) {
                                 await new Promise(r => setTimeout(r, delays[retry]));
-                                return callAI(retry + 1, currentModel);
+                                return callAI(retry + 1);
                             }
                         }
                         throw e;
