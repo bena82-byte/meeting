@@ -208,23 +208,26 @@
                     const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${activeKey}`;
                     
                     try {
-                        const prompt = `You are an Elite Sales Performance Mentor. Analyze the meeting transcript.
-Return ONLY a valid JSON object with EXACTLY these four keys (all lowercase strings):
-- "summary": Professional executive summary and client sentiment.
-- "actions": Explicit action items in format: Owner - Task - Due Date.
-- "suggestions": 2 to 3 specific follow-up items to move the deal forward.
-- "coaching": Brutally honest feedback on Discovery and Delivery.
-
-==== TRANSCRIPT ====
-${text}`;
-
                         const res = await fetch(url, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
-                                contents: [{ parts: [{ text: prompt }] }],
+                                systemInstruction: {
+                                    parts: [{ text: "You are an Elite Sales Performance Mentor. Analyze the meeting transcript to produce high-impact recap reports." }]
+                                },
+                                contents: [{ parts: [{ text: text }] }],
                                 generationConfig: {
-                                    responseMimeType: "application/json"
+                                    responseMimeType: "application/json",
+                                    responseSchema: {
+                                        type: "OBJECT",
+                                        properties: {
+                                            summary: { type: "STRING", description: "Professional executive summary and client sentiment." },
+                                            actions: { type: "STRING", description: "Explicit action items in format: Owner - Task - Due Date." },
+                                            suggestions: { type: "STRING", description: "2 to 3 specific follow-up items to move the deal forward." },
+                                            coaching: { type: "STRING", description: "Brutally honest feedback on Discovery and Delivery." }
+                                        },
+                                        required: ["summary", "actions", "suggestions", "coaching"]
+                                    }
                                 }
                             })
                         });
@@ -234,6 +237,15 @@ ${text}`;
                             let errMsg = `HTTP ${res.status}`;
                             try { errMsg = JSON.parse(errText).error.message; } catch(e) {}
                             
+                            // Highly explicit error trapping to prevent ambiguous crashes
+                            if (res.status === 403) {
+                                errMsg = "API Key Error (403): Your key may have restricted domain permissions.";
+                            } else if (res.status === 400) {
+                                errMsg = "Bad Request (400): The API rejected the payload structure. " + errMsg;
+                            } else if (res.status === 404) {
+                                errMsg = `Model Error (404): The required model (${currentModel}) could not be found.`;
+                            }
+                            
                             const errorObj = new Error(errMsg);
                             errorObj.status = res.status;
                             throw errorObj;
@@ -241,7 +253,7 @@ ${text}`;
                         
                         return await res.json();
                     } catch (e) {
-                        // Fail fast. Only retry on Server Overloads (5xx) or Rate Limits (429).
+                        // Fail fast on persistent errors. Only retry on Rate Limits (429) or Server Overloads (5xx).
                         if (e.status === 429 || (e.status >= 500 && e.status < 600)) {
                             if (retry < delays.length) {
                                 await new Promise(r => setTimeout(r, delays[retry]));
@@ -257,22 +269,22 @@ ${text}`;
                     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     
                     if (aiText) {
-                        // Robust JSON Sanitizer
+                        // Robust JSON Sanitizer guarantees smooth parsing
                         const cleanText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
                         const parsedData = JSON.parse(cleanText);
                         
                         setAnalysis({
-                            summary: parsedData.summary || parsedData.Summary || "No summary provided.",
-                            actions: parsedData.actions || parsedData.ActionItems || "No actions provided.",
-                            suggestions: parsedData.suggestions || parsedData.Suggestions || "No suggestions provided.",
-                            coaching: parsedData.coaching || parsedData.Coaching || "No coaching provided."
+                            summary: parsedData.summary || "No summary provided.",
+                            actions: parsedData.actions || "No actions provided.",
+                            suggestions: parsedData.suggestions || "No suggestions provided.",
+                            coaching: parsedData.coaching || "No coaching provided."
                         });
                         setView('analysis');
                     } else {
                         throw new Error("AI returned an empty response.");
                     }
                 } catch (e) { 
-                    setError(`API Error: ${e.message}`); 
+                    setError(`Error Details: ${e.message}`); 
                 }
                 setIsLoading(false);
             };
