@@ -1,17 +1,19 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" translate="no">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- Prevents Google Chrome from aggressively asking to translate the page -->
+    <meta name="google" content="notranslate">
     <title>Minutes AI | Pro Master Build</title>
     <!-- Core Libraries -->
-    <script src="[https://unpkg.com/react@18/umd/react.production.min.js](https://unpkg.com/react@18/umd/react.production.min.js)"></script>
-    <script src="[https://unpkg.com/react-dom@18/umd/react-dom.production.min.js](https://unpkg.com/react-dom@18/umd/react-dom.production.min.js)"></script>
-    <script src="[https://unpkg.com/@babel/standalone/babel.min.js](https://unpkg.com/@babel/standalone/babel.min.js)"></script>
-    <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
-    <script src="[https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js](https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js)"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <style>
-        @import url('[https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap](https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap)');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; background: #f8fafc; overflow-x: hidden; touch-action: manipulation; }
         
         .loading-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #fff; position: fixed; inset: 0; z-index: 9999; }
@@ -194,16 +196,17 @@
                 const systemPrompt = "You are an Elite Sales Performance Mentor. Analyze the meeting transcript to produce high-impact recap reports.";
 
                 const callAI = async (retry = 0) => {
-                    const delays = [1000, 2000, 4000, 8000, 16000];
-                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey || fallbackKey}`;
+                    const delays = [1000, 2000, 4000]; // Shortened retry list to prevent long spinning
+                    const activeKey = apiKey || fallbackKey;
+                    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeKey}`;
                     
                     try {
                         const res = await fetch(url, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
-                                systemInstruction: { parts: [{ text: systemPrompt }] },
-                                contents: [{ parts: [{ text: text }] }],
+                                // Merged system instructions to prevent strict API rejection
+                                contents: [{ parts: [{ text: `==== INSTRUCTIONS ====\n${systemPrompt}\n\n==== TRANSCRIPT ====\n${text}` }] }],
                                 generationConfig: {
                                     responseMimeType: "application/json",
                                     responseSchema: {
@@ -222,11 +225,16 @@
                         
                         const data = await res.json();
                         if (!res.ok) {
+                            // If Google rejects it due to Bad Request (400), don't retry, fail fast so it doesn't spin
+                            if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+                                throw new Error(`Google API Rejected Request: ${data.error?.message || "Invalid Payload"}`);
+                            }
                             throw new Error(data.error?.message || "AI Analysis Failed");
                         }
                         return data;
                     } catch (e) {
-                        if (retry < 5) {
+                        // Only retry on network failures or temporary server issues
+                        if (retry < delays.length && !e.message.includes("Google API Rejected Request") && !e.message.includes("API key not valid")) {
                             await new Promise(r => setTimeout(r, delays[retry]));
                             return callAI(retry + 1);
                         }
@@ -239,8 +247,7 @@
                     const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                     
                     if (aiText) {
-                        // Robust JSON Sanitizer: Automatically strips out unwanted markdown wrappers 
-                        // that the AI sometimes adds to JSON responses, preventing SyntaxErrors.
+                        // Robust JSON Sanitizer
                         const cleanText = aiText.replace(/```json/gi, '').replace(/```/g, '').trim();
                         const parsedData = JSON.parse(cleanText);
                         
@@ -255,7 +262,7 @@
                         throw new Error("AI returned an empty response.");
                     }
                 } catch (e) { 
-                    setError("Unable to connect to the AI service. Please ensure your new API key has the Generative Language API enabled, or check your network."); 
+                    setError(`Error: ${e.message}`); 
                 }
                 setIsLoading(false);
             };
@@ -286,7 +293,7 @@
                     {toast && <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-full text-[10px] font-black uppercase tracking-widest shadow-2xl z-[9999] fade-in">{toast}</div>}
                     <header className="flex justify-between items-center mb-10">
                         <div className="flex items-center gap-2">
-                            <div className="bg-indigo-600 p-2.5 rounded-2xl text-white shadow-lg shadow-indigo-100"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></div>
+                            <div className="bg-indigo-600 p-2.5 rounded-2xl text-white shadow-lg shadow-indigo-100"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></div>
                             <h1 className="font-black italic text-xl tracking-tighter uppercase text-slate-800 leading-none">MINUTES AI</h1>
                         </div>
                         <div className="flex bg-slate-200 p-1.5 rounded-2xl shadow-inner border border-slate-300">
@@ -304,7 +311,7 @@
                                     {vols.map((v, i) => <div key={i} className="w-2.5 bg-indigo-500 vol-bar shadow-sm" style={{ height: `${Math.max(15, v)}%`, opacity: 0.3 + (v/100) }} />)}
                                 </div>
                                 <button onClick={toggleRec} className={`w-40 h-40 rounded-full mx-auto flex flex-col items-center justify-center shadow-2xl transition-all active:scale-95 relative z-10 ${isRecording ? 'bg-indigo-600 ring-8 ring-indigo-50 shadow-indigo-200' : 'bg-slate-100'}`}>
-                                    {isRecording ? <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="5" y="5" rx="2" ry="2"/></svg> : <svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>}
+                                    {isRecording ? <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="5" y="5" rx="2" ry="2"/></svg> : <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>}
                                     <span className={`text-[10px] font-black uppercase mt-3 tracking-widest ${isRecording ? 'text-white' : 'text-slate-400'}`}>{isRecording ? "Stop" : "Record"}</span>
                                 </button>
                                 <input type="text" placeholder="Subject..." className="mt-8 w-full text-center bg-transparent border-b border-slate-100 py-3 text-sm font-bold focus:border-indigo-400 outline-none uppercase tracking-widest placeholder:text-slate-300" value={topic} onChange={(e) => setTopic(e.target.value)} />
