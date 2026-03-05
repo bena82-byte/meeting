@@ -196,13 +196,15 @@
 
                 const callAI = async (retry = 0) => {
                     const delays = [1000, 2000, 4000]; 
-                    const activeKey = apiKey || fallbackKey;
                     
                     // ENVIRONMENT-BASED ROUTING FIX: 
-                    // If 'apiKey' exists, we are running inside the Canvas tester, so use the internal preview model.
-                    // If 'apiKey' is empty, we are on GitHub Pages, so use the robust public 1.5-flash model.
-                    // This perfectly eliminates the 404 "not found" error.
-                    const currentModel = apiKey ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+                    // Reliably detect if we are testing inside the Canvas environment
+                    const isCanvas = typeof __app_id !== 'undefined';
+                    
+                    // Route to the correct model and key based strictly on the environment
+                    const currentModel = isCanvas ? "gemini-2.5-flash-preview-09-2025" : "gemini-1.5-flash";
+                    const activeKey = isCanvas ? "" : fallbackKey;
+                    
                     const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${activeKey}`;
                     
                     try {
